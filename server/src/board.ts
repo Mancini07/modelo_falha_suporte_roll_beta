@@ -1,0 +1,206 @@
+import { config } from './config.js';
+import { getTemperatureSeries } from './dynamo.js';
+import { getPositions } from './postgres.js';
+import { pairSeries } from './pairing.js';
+import type { PinnedPair } from './pairsStore.js';
+import type { BoardResult, PairState } from './types.js';
+
+/**
+ * Janela de risco. Um rompimento do limite mantém o ativo em risco por este
+ * período: a temperatura oscila, e um ativo que voltou para dentro do limite
+ * na última leitura não deixou de merecer atenção. Também é a janela lida do
+ * histórico.
+ */
+export const RISK_HOLD_HOURS = 24;
+const WINDOW_MS = RISK_HOLD_HOURS * 60 * 60 * 1000;
+
+/**
+ * O lado quente trocou de lugar?
+ *
+ * Só conta como inversão se o desvio mudou de sinal em relação ao normal do
+ * ativo E o giro foi maior que a tolerância dele. Sem essa segunda condição,
+ * um ativo cujo normal é próximo de zero acusaria inversão a cada oscilação.
+ */
+export function isInverted(
+  delta: number,
+  baselineC: number | null,
+  thresholdC: number,
+): boolean {
+  if (baselineC == null) return false;
+  const sd = Math.sign(delta);
+  const sb = Math.sign(baselineC);
+  if (sd === 0 || sb === 0 || sd === sb) return false;
+  return Math.abs(delta - baselineC) > thresholdC;
+}
+
+/** Mediana — resiste a picos isolados melhor que a média. */
+export function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const s = [...values].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+/**
+ * Aprende o desvio normal de um par a partir de uma janela escolhida pelo
+ * usuário — de propósito, e não dos últimos dias: se a falha já começou,
+ * aprender do período recente ensinaria a falha como se fosse o normal.
+ */
+export async function learnBaseline(
+  pointA: number,
+  pointB: number,
+  fromMs: number,
+  toMs: number,
+  toleranceMs: number,
+): Promise<{ baselineC: number; samples: number } | null> {
+  const [a, b] = await Promise.all([
+    getTemperatureSeries(pointA, fromMs, toMs),
+    getTemperatureSeries(pointB, fromMs, toMs),
+  ]);
+  // O limite não influencia o cálculo, só o campo `alarm` que aqui é ignorado.
+  const { pairs } = pairSeries(a, b, toleranceMs, Infinity);
+  const value = median(pairs.map((p) => p.delta));
+  return value == null ? null : { baselineC: value, samples: pairs.length };
+}
+
+export async function evaluateBoard(
+  pinned: PinnedPair[],
+  defaultThresholdC: number,
+  toleranceMs: number,
+): Promise<BoardResult> {
+  const since = Date.now() - WINDOW_MS;
+
+  // Metadados de todos os pontos numa consulta só.
+  const ids = [...new Set(pinned.flatMap((p) => [p.pointA, p.pointB]))];
+  const meta = ids.length ? await getPositions(ids) : new Map();
+
+  const states = await Promise.all(
+    pinned.map(async (pin): Promise<PairState> => {
+      const infoA = meta.get(pin.pointA);
+      const infoB = meta.get(pin.pointB);
+
+      // Cada ativo tem sua assimetria normal entre mancais: um redutor grande
+      // tolera mais desvio que um rolo leve. O limite do par manda; o global
+      // é só o ponto de partida.
+      const thresholdIsCustom = pin.thresholdC != null;
+      const thresholdC = pin.thresholdC ?? defaultThresholdC;
+      const baselineC = pin.baselineC ?? null;
+
+      const base = {
+        id: pin.id,
+        assetId: pin.assetId,
+        assetName: infoA?.assetName ?? pin.assetName,
+        facilityName: infoA?.facilityName ?? pin.facilityName,
+        companyName: infoA?.companyName ?? null,
+        label: pin.label,
+        thresholdC,
+        thresholdIsCustom,
+        baselineC,
+      };
+
+      try {
+        const [a, b] = await Promise.all([
+          getTemperatureSeries(pin.pointA, since),
+          getTemperatureSeries(pin.pointB, since),
+        ]);
+
+        const { pairs } = pairSeries(a, b, toleranceMs, thresholdC);
+        const latest = pairs[pairs.length - 1];
+
+        // Basta um rompimento na janela para o ativo seguir em risco.
+        const breaches = pairs.filter((p) => p.alarm);
+        const lastBreachAt = breaches.length ? breaches[breaches.length - 1].t : null;
+
+        const lastA = a[a.length - 1] ?? null;
+        const lastB = b[b.length - 1] ?? null;
+
+        // Sem par válido, ainda mostramos a última leitura de cada lado — com o
+        // horário dela, que é justamente o que revela um sensor atrasado.
+        const pointA = {
+          positionId: pin.pointA,
+          name: infoA?.positionName ?? `Ponto ${pin.pointA}`,
+          temp: latest ? latest.a : lastA?.v ?? null,
+          t: latest ? latest.tA : lastA?.t ?? null,
+        };
+        const pointB = {
+          positionId: pin.pointB,
+          name: infoB?.positionName ?? `Ponto ${pin.pointB}`,
+          temp: latest ? latest.b : lastB?.v ?? null,
+          t: latest ? latest.tB : lastB?.t ?? null,
+        };
+
+        if (!latest) {
+          return {
+            ...base,
+            pointA,
+            pointB,
+            delta: null,
+            t: null,
+            lagMs: null,
+            status: 'SEM_DADOS',
+            inverted: false,
+            breachCount: breaches.length,
+            lastBreachAt,
+            heldByRecentBreach: false,
+            hotter: null,
+            reason:
+              a.length === 0 || b.length === 0
+                ? 'One of the points has not transmitted in the last 12 h.'
+                : 'No simultaneous readings within the tolerance.',
+          };
+        }
+
+        return {
+          ...base,
+          pointA,
+          pointB,
+          delta: latest.delta,
+          t: latest.t,
+          lagMs: latest.lagMs,
+          status: latest.alarm || breaches.length > 0 ? 'ALARME' : 'NORMAL',
+          inverted: isInverted(latest.delta, baselineC, thresholdC),
+          breachCount: breaches.length,
+          lastBreachAt,
+          heldByRecentBreach: !latest.alarm && breaches.length > 0,
+          hotter: latest.delta === 0 ? null : latest.delta > 0 ? 'A' : 'B',
+        };
+      } catch (err) {
+        return {
+          ...base,
+          pointA: { positionId: pin.pointA, name: infoA?.positionName ?? `Ponto ${pin.pointA}`, temp: null, t: null },
+          pointB: { positionId: pin.pointB, name: infoB?.positionName ?? `Ponto ${pin.pointB}`, temp: null, t: null },
+          delta: null,
+          t: null,
+          lagMs: null,
+          status: 'SEM_DADOS',
+          inverted: false,
+          breachCount: 0,
+          lastBreachAt: null,
+          heldByRecentBreach: false,
+          hotter: null,
+          reason: `Failed to read the series: ${(err as Error).message}`,
+        };
+      }
+    }),
+  );
+
+  // O que precisa de ação sobe ao topo: alarme primeiro, e a inversão pesa
+  // junto — um lado que trocou de lugar merece atenção mesmo sem romper o limite.
+  const rank = { ALARME: 0, NORMAL: 1, SEM_DADOS: 2 } as const;
+  const score = (s: PairState) => rank[s.status] - (s.inverted ? 0.5 : 0);
+  states.sort((x, y) => {
+    if (score(x) !== score(y)) return score(x) - score(y);
+    return Math.abs(y.delta ?? 0) - Math.abs(x.delta ?? 0);
+  });
+
+  return {
+    pairs: states,
+    settings: {
+      thresholdC: defaultThresholdC,
+      toleranceMs,
+      riskHoldHours: RISK_HOLD_HOURS,
+      temperatureOffsetC: config.temperatureOffsetC,
+    },
+    generatedAt: Date.now(),
+  };
+}

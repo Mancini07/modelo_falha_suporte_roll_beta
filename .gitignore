@@ -1,0 +1,21 @@
+# Dependências e build
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Segredos — nunca versionar
+.env
+.env.local
+.env.*.local
+
+# Configuração local do Claude Code: pode conter credenciais capturadas
+# de comandos executados durante o desenvolvimento.
+.claude/
+
+# Estado de execução: os pares cravados são configuração da instalação,
+# não código. Cada ambiente monta o seu.
+server/data/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
