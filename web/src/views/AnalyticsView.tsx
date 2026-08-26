@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { fetchAnalysis, setPairSettings } from '../api';
-import type { AnalysisResult, AnalysisSettings, PairState } from '../types';
+import { fetchAnalysis, fetchOccurrences, setPairSettings } from '../api';
+import type { AnalysisResult, AnalysisSettings, OccurrenceRecord, PairState } from '../types';
 import StatusHero from '../components/analytics/StatusHero';
 import TempChart from '../components/analytics/TempChart';
 import DeltaChart from '../components/analytics/DeltaChart';
 import PairTable from '../components/analytics/PairTable';
+import OccurrenceTimeline from '../components/analytics/OccurrenceTimeline';
 import VibrationChart, { AXES } from '../components/analytics/VibrationChart';
 import { minutes } from '../format.en';
 
@@ -39,6 +40,9 @@ export default function AnalyticsView({ pinned, thresholdC, toleranceMin, initia
   /** Limiar em edição — string para permitir o campo vazio enquanto digita. */
   const [mountDraft, setMountDraft] = useState<string>('');
   const [saving, setSaving] = useState(false);
+  const [occurrences, setOccurrences] = useState<OccurrenceRecord[]>([]);
+  const [occurrenceTotal, setOccurrenceTotal] = useState(0);
+  const [loadingOcc, setLoadingOcc] = useState(false);
   const [data, setData] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
@@ -65,6 +69,33 @@ export default function AnalyticsView({ pinned, thresholdC, toleranceMin, initia
   useEffect(() => {
     if (data) setMountDraft(String(data.settings.mountedMinAccG));
   }, [data?.settings.mountedMinAccG, data?.pointA.positionId]);
+
+  // A linha do tempo é do ATIVO, então acompanha o ponto carregado.
+  const assetId = data?.pointA.assetId ?? data?.pointB.assetId ?? null;
+  useEffect(() => {
+    if (assetId == null) {
+      setOccurrences([]);
+      setOccurrenceTotal(0);
+      return;
+    }
+    const ctrl = new AbortController();
+    setLoadingOcc(true);
+    fetchOccurrences(assetId, ctrl.signal)
+      .then((r) => {
+        setOccurrences(r.occurrences);
+        setOccurrenceTotal(r.total);
+      })
+      .catch((e: Error) => {
+        if (e.name !== 'AbortError') {
+          setOccurrences([]);
+          setOccurrenceTotal(0);
+        }
+      })
+      .finally(() => setLoadingOcc(false));
+    return () => ctrl.abort();
+  }, [assetId]);
+
+  const openCount = occurrences.filter((o) => o.closedAt == null).length;
 
   const selectedId = `${settings.pointA}-${settings.pointB}`;
 
@@ -394,6 +425,28 @@ export default function AnalyticsView({ pinned, thresholdC, toleranceMin, initia
               unit="mm/s"
               decimals={2}
             />
+          </section>
+
+          <section className="card">
+            <header>
+              <h2>Occurrence timeline</h2>
+              <span className={`chip${openCount > 0 ? ' chip-open' : ''}`}>
+                {openCount > 0
+                  ? `${openCount} open`
+                  : occurrences.length > 0
+                    ? 'none open'
+                    : 'no records'}
+              </span>
+            </header>
+            <p className="sub">
+              Every occurrence on <strong>{data.pointA.assetName ?? 'this asset'}</strong> — when
+              it was opened and by whom, the diagnostic, when it was closed and by whom, and
+              whether the analysis was judged valid.{' '}
+              {occurrenceTotal > occurrences.length
+                ? `Showing the ${occurrences.length} most recent of ${occurrenceTotal}.`
+                : 'Most recent first.'}
+            </p>
+            <OccurrenceTimeline occurrences={occurrences} loading={loadingOcc} />
           </section>
 
           <PairTable data={data} />

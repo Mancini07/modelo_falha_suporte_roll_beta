@@ -185,3 +185,90 @@ tbody tr.is-alarm { background: var(--critical-wash); }
 tbody tr.is-alarm td.delta { color: var(--critical); font-weight: 660; }
 .tag-alarm { display: inline-flex; align-items: center; gap: 4px; color: var(--critical); font-weight: 620; }
 .tag-ok { color: var(--text-muted); }
+
+/* --- linha do tempo de ocorrências ---------------------------------------- */
+.chip-open {
+  border-color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 14%, var(--surface-1));
+  color: var(--warning);
+}
+
+.timeline { list-style: none; margin: 0; padding: 0 0 0 4px; }
+
+.tl-item {
+  position: relative;
+  padding: 0 0 20px 26px;
+  border-left: 2px solid var(--border);
+}
+.tl-item:last-child { border-left-color: transparent; padding-bottom: 0; }
+
+.tl-marker {
+  position: absolute; left: -7px; top: 4px;
+  width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid var(--surface-1);
+}
+/* Ocorrência aberta ganha halo: é o que ainda pede ação. */
+.tl-item.is-open > .tl-marker { box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 35%, transparent); }
+
+.tl-body {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 14px;
+}
+.tl-item.is-open .tl-body { border-color: color-mix(in srgb, var(--warning) 55%, var(--border)); }
+
+.tl-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.tl-status { font-size: 13px; font-weight: 640; text-transform: capitalize; }
+.tl-state { font-size: 11.5px; color: var(--text-muted); font-weight: 560; }
+.tl-state.is-open { color: var(--warning); }
+.tl-id { font-size: 11px; color: var(--text-muted); margin-left: auto; font-variant-numeric: tabular-nums; }
+
+.tl-row { display: flex; gap: 12px; align-items: flex-start; padding: 4px 0; font-size: 12.5px; }
+.tl-when {
+  flex: 0 0 132px; color: var(--text-muted); font-size: 11.5px;
+  font-variant-numeric: tabular-nums; padding-top: 1px;
+}
+.tl-what { color: var(--text-secondary); min-width: 0; }
+.tl-what strong { color: var(--text-primary); font-weight: 600; }
+.tl-pending { color: var(--warning); }
+
+.tl-diag { border-top: 1px dashed var(--border); margin-top: 4px; padding-top: 8px; }
+.tl-diag-name { display: block; color: var(--text-primary); font-weight: 620; font-size: 13px; }
+.tl-by { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.tl-ai {
+  font-style: normal; font-size: 10px; font-weight: 700; letter-spacing: .04em;
+  padding: 1px 5px; border-radius: 4px;
+  background: color-mix(in srgb, var(--axis-h) 25%, var(--surface-1)); color: var(--axis-h);
+}
+
+.tl-note { margin: 6px 0 0; font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+.tl-note b {
+  display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--text-muted); font-weight: 620; margin-bottom: 1px;
+}
+
+/* O parecer do analista é o texto de mais peso do bloco. */
+.tl-comment {
+  background: var(--surface-1);
+  border-left: 2px solid var(--good);
+  border-radius: 0 7px 7px 0;
+  padding: 8px 11px;
+  margin-top: 8px;
+  color: var(--text-primary);
+}
+
+.tl-nocomment { color: var(--text-muted); font-style: italic; margin-top: 6px; }
+
+.tl-verdicts { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+.verdict {
+  font-size: 11.5px; font-weight: 580; padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface-1);
+}
+.verdict.is-yes { color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, var(--border)); }
+.verdict.is-no { color: var(--text-muted); }
+
+@media (max-width: 620px) {
+  .tl-row { flex-direction: column; gap: 2px; }
+  .tl-when { flex: none; }
+}

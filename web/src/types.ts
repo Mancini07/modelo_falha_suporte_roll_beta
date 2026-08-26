@@ -43,6 +43,53 @@ export interface PairState {
   heldByRecentBreach: boolean;
   hotter: 'A' | 'B' | null;
   reason?: string;
+  /** ocorrências abertas neste ativo — independe do estado dos sensores */
+  openOccurrences: number;
+  occurrenceStatus: string | null;
+  occurrenceStatusId: number | null;
+  occurrenceOpenedAt: string | null;
+}
+
+export interface OccurrenceDiagnostic {
+  id: number;
+  label: string | null;
+  diagnostic: string | null;
+  recommendation: string | null;
+  rootCause: string | null;
+  /** o comentário que o analista escreve ao diagnosticar ou encerrar */
+  comments: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  createdByAI: boolean;
+  closedAt: string | null;
+  closedBy: string | null;
+}
+
+export interface OccurrenceHistory {
+  occurrences: OccurrenceRecord[];
+  /** quantas existem ao todo — a tela mostra só as mais recentes */
+  total: number;
+}
+
+export interface OccurrenceRecord {
+  id: number;
+  assetId: number;
+  assetName: string | null;
+  status: string | null;
+  statusId: number | null;
+  openedAt: string;
+  /** null quando aberta automaticamente pelo sistema */
+  openedBy: string | null;
+  manuallyOpened: boolean;
+  closedAt: string | null;
+  closedBy: string | null;
+  validAnalysis: boolean | null;
+  validDiagnostic: boolean | null;
+  hadIntervention: boolean | null;
+  /** o comentário escrito por quem fecha a ocorrência */
+  closingComment: string | null;
+  comments: string | null;
+  diagnostics: OccurrenceDiagnostic[];
 }
 
 export interface BoardResult {

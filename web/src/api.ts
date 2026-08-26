@@ -1,4 +1,4 @@
-import type { BoardResult, Company, TreeFacility } from './types';
+import type { BoardResult, Company, OccurrenceHistory, TreeFacility } from './types';
 
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -17,6 +17,11 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
 export function fetchBoard(toleranceMin: number, signal?: AbortSignal): Promise<BoardResult> {
   const qs = new URLSearchParams({ toleranceMin: String(toleranceMin) });
   return json<BoardResult>(`/api/board?${qs}`, { signal });
+}
+
+/** Linha do tempo de ocorrências de um ativo. */
+export function fetchOccurrences(assetId: number, signal?: AbortSignal) {
+  return json<OccurrenceHistory>(`/api/occurrences?assetId=${assetId}`, { signal });
 }
 
 export function fetchTree(companyId: number, signal?: AbortSignal): Promise<TreeFacility[]> {

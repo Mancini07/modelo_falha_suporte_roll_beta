@@ -144,6 +144,40 @@ O normal é aprendido de uma **janela escolhida por você**, no diálogo do ativ
 automático dos últimos dias: se a falha já começou, aprender do período recente
 ensinaria a falha como se fosse o normal, e o alarme nunca dispararia.
 
+## Ocorrências
+
+O painel mostra, em cada card, se aquele **ativo** tem ocorrência aberta — com a
+contagem, o status mais severo e desde quando. A ausência também é dita
+(*No open occurrence*), para o "não tem" ser explícito.
+
+Ocorrência é do ativo, não do par de sensores: aparece mesmo quando a comparação
+de temperatura está suspensa por sensor fora da máquina.
+
+Ocorrências de **análise do Copilot** (`sysStatusId = 8`) ficam de fora do painel
+e da linha do tempo: são triagem automática, não ocorrência de manutenção.
+
+Na tela **Analytics**, a *Occurrence timeline* traz o ciclo completo das
+**5 ocorrências mais recentes** do ativo. Quando existem mais, o cabeçalho diz
+quantas — "Showing the 5 most recent of 14" — para o corte ficar explícito em vez
+de dar a impressão de que o ativo só teve essas:
+
+- quando foi aberta e **por quem** (ou *the system*, quando automática)
+- o **diagnóstico**, com autor, recomendação, causa raiz e a *analyst note*
+  escrita no momento do diagnóstico (`tbAssetOccurrenceDiagnostic.comments`)
+- diagnósticos gerados por IA levam o selo `AI`
+- quando foi **encerrada e por quem**, com o **comentário escrito na hora do
+  fechamento** (`tbAssetOccurrence.exclusionReason`) em destaque logo abaixo;
+  quando não há, diz *No closing comment*
+- se a análise e o diagnóstico foram julgados **válidos**
+- motivo de fechamento e comentários
+
+Fonte: `tbAssetOccurrence` + `tbAssetOccurrenceDiagnostic`, com os UUIDs de autor
+resolvidos em `tbUser` e a severidade em `tbSysStatus`.
+
+Como a interface é inglesa, o rótulo do diagnóstico vem de `tbDiagnostic.nameInEN`
+e os 8 status são traduzidos no servidor (`STATUS_EN` em `postgres.ts`) — a
+tabela só guarda o rótulo em português.
+
 ## Ativos cravados
 
 Os pares ficam gravados em `server/data/pairs.json` e sobrevivem ao restart. Em
@@ -183,6 +217,7 @@ menos dois pontos aparecem no seletor — um ponto sozinho não tem par.
 | `PATCH /api/pairs/:id` | ajusta o limite de um ativo (`{"thresholdC": 5}`; `null` volta ao padrão) |
 | `POST /api/pairs/:id/baseline` | aprende o normal de uma janela (`{"from","to"}`), grava na mão (`{"baselineC"}`) ou limpa (`{}`) |
 | `GET /api/companies` | empresas com pontos de temperatura ativos |
+| `GET /api/occurrences?assetId=` | linha do tempo de ocorrências de um ativo |
 | `GET /api/analysis?a=&b=&days=` | série completa de um par (usada para investigação; o painel não consome) |
 
 O `/api/board` lê só as últimas 12 h — sem gráficos, basta a comparação válida

@@ -1,6 +1,6 @@
 import { config } from './config.js';
 import { getTemperatureSeries, getVibrationSeries } from './dynamo.js';
-import { getPositions } from './postgres.js';
+import { getPositions, getOpenOccurrences } from './postgres.js';
 import { pairSeries } from './pairing.js';
 import type { PinnedPair } from './pairsStore.js';
 import type { BoardResult, PairState, VibrationSample } from './types.js';
@@ -132,6 +132,11 @@ export async function evaluateBoard(
   const ids = [...new Set(pinned.flatMap((p) => [p.pointA, p.pointB]))];
   const meta = ids.length ? await getPositions(ids) : new Map();
 
+  // Ocorrências são do ATIVO, não do par de sensores: valem mesmo quando a
+  // comparação de temperatura está suspensa.
+  const assetIds = [...new Set(pinned.map((p) => p.assetId).filter((id) => id > 0))];
+  const occurrences = await getOpenOccurrences(assetIds);
+
   const states = await Promise.all(
     pinned.map(async (pin): Promise<PairState> => {
       const infoA = meta.get(pin.pointA);
@@ -144,6 +149,8 @@ export async function evaluateBoard(
       const thresholdC = pin.thresholdC ?? defaultThresholdC;
       const baselineC = pin.baselineC ?? null;
 
+      const occ = occurrences.get(pin.assetId) ?? null;
+
       const base = {
         id: pin.id,
         assetId: pin.assetId,
@@ -154,6 +161,10 @@ export async function evaluateBoard(
         thresholdC,
         thresholdIsCustom,
         baselineC,
+        openOccurrences: occ?.openCount ?? 0,
+        occurrenceStatus: occ?.worstStatus ?? null,
+        occurrenceStatusId: occ?.worstStatusId ?? null,
+        occurrenceOpenedAt: occ?.oldestOpenedAt ?? null,
       };
 
       try {

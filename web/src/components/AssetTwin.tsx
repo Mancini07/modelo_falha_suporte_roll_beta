@@ -66,6 +66,19 @@ export default function AssetTwin({ pair, riskHoldHours, mountedMinAccG, onRemov
 
   const assetLabel = pair.assetName ?? `Asset ${pair.assetId}`;
 
+  /**
+   * Ocorrência é do ativo e independe do estado dos sensores: um ativo pode
+   * estar com a comparação suspensa e ainda assim ter ocorrência aberta.
+   * Severidade cresce com o sysStatusId (1 normal … 7 crítico).
+   */
+  const hasOccurrence = pair.openOccurrences > 0;
+  const occSeverity =
+    pair.occurrenceStatusId != null && pair.occurrenceStatusId >= 5
+      ? 'var(--critical)'
+      : pair.occurrenceStatusId != null && pair.occurrenceStatusId >= 3
+        ? 'var(--warning)'
+        : 'var(--text-muted)';
+
   return (
     <article
       className={`twin${alarm ? ' is-alarm' : ''}${noData ? ' is-nodata' : ''}${sensorOff ? ' is-sensoroff' : ''}`}
@@ -240,6 +253,26 @@ export default function AssetTwin({ pair, riskHoldHours, mountedMinAccG, onRemov
           <i className="dot" style={{ background: alarmB ? 'var(--critical)' : 'var(--series-b)' }} />
         </span>
       </footer>
+
+      <p className={`twin-occ${hasOccurrence ? ' is-open' : ''}`}>
+        {hasOccurrence ? (
+          <>
+            <i className="dot" style={{ background: occSeverity }} />
+            <strong>
+              {pair.openOccurrences} open occurrence{pair.openOccurrences === 1 ? '' : 's'}
+            </strong>
+            {pair.occurrenceStatus && <> · {pair.occurrenceStatus}</>}
+            {pair.occurrenceOpenedAt && (
+              <> · since {stamp(new Date(pair.occurrenceOpenedAt).getTime())}</>
+            )}
+          </>
+        ) : (
+          <>
+            <i className="dot" style={{ background: 'var(--border-strong)' }} />
+            No open occurrence
+          </>
+        )}
+      </p>
 
       {sensorOff && offName && (
         <p className="twin-sensoroff">

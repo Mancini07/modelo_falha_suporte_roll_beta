@@ -6,6 +6,7 @@ import {
   listPositionsByCompany,
   getCompanyTree,
   listCompanies,
+  getOccurrenceHistory,
   closePool,
 } from './postgres.js';
 import {
@@ -281,6 +282,18 @@ app.get('/api/board', async (req, res) => {
     res.json(await evaluateBoard(pinned, thresholdC, toleranceMin * 60_000));
   } catch (err) {
     console.error('[/api/board]', err);
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/** Linha do tempo de ocorrências de um ativo. */
+app.get('/api/occurrences', async (req, res) => {
+  try {
+    const assetId = num(req.query.assetId, 0);
+    if (!assetId) return res.status(400).json({ error: 'assetId é obrigatório' });
+    res.json(await getOccurrenceHistory(assetId, Math.min(num(req.query.limit, 5), 50)));
+  } catch (err) {
+    console.error('[/api/occurrences]', err);
     res.status(500).json({ error: (err as Error).message });
   }
 });

@@ -137,6 +137,14 @@ export interface PairState {
   hotter: 'A' | 'B' | null;
   /** por que não há comparação, quando status = SEM_DADOS */
   reason?: string;
+
+  /** ocorrências abertas neste ativo — independe do estado dos sensores */
+  openOccurrences: number;
+  /** nome do status mais severo entre as abertas */
+  occurrenceStatus: string | null;
+  occurrenceStatusId: number | null;
+  /** abertura mais antiga ainda em aberto */
+  occurrenceOpenedAt: string | null;
 }
 
 export interface BoardResult {
