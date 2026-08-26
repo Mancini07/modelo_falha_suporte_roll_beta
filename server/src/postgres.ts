@@ -8,6 +8,22 @@ const pool = new pg.Pool({
   max: 4,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 20_000,
+  // Mantém a conexão ociosa viva: sem isso o RDS derruba o socket depois de
+  // alguns minutos parado, que é justamente o caso do painel fora de uso.
+  keepAlive: true,
+});
+
+/**
+ * O pool emite 'error' quando um cliente OCIOSO perde a conexão — RDS
+ * encerrando socket parado, failover, queda de rede. Sem um ouvinte aqui, o
+ * Node trata como exceção não capturada e derruba o processo inteiro: a API
+ * morria sozinha depois de um tempo sem uso.
+ *
+ * Registrando o ouvinte, o cliente quebrado é descartado e o pool abre outro
+ * na próxima consulta.
+ */
+pool.on('error', (err) => {
+  console.error('[postgres] cliente ocioso caiu, será descartado:', err.message);
 });
 
 /**

@@ -5,6 +5,8 @@ interface Props {
   pair: PairState;
   /** For how many hours a breach keeps the asset at risk. */
   riskHoldHours: number;
+  /** Minimum acceleration RMS, in g, for a sensor to count as mounted. */
+  mountedMinAccG: number;
   onRemove: (id: string) => void;
   onAnalyse: (id: string) => void;
 }
@@ -18,11 +20,18 @@ const H = 200;
  * sensor pulse red. The geometry is the same for every asset — what changes is
  * which side heats up.
  */
-export default function AssetTwin({ pair, riskHoldHours, onRemove, onAnalyse }: Props) {
+export default function AssetTwin({ pair, riskHoldHours, mountedMinAccG, onRemove, onAnalyse }: Props) {
   // Cada ativo traz o seu limite; o global é só o padrão de quem não definiu.
   const thresholdC = pair.thresholdC;
   const alarm = pair.status === 'ALARME';
   const noData = pair.status === 'SEM_DADOS';
+  /**
+   * Sensor solto invalida a comparação: ele lê o ambiente, não o mancal. Nada
+   * de falha de lubrificação enquanto isso não for resolvido.
+   */
+  const offA = pair.offMachineA;
+  const offB = pair.offMachineB;
+  const sensorOff = pair.status === 'SENSOR_FORA';
 
   const hotA = pair.hotter === 'A';
   const hotB = pair.hotter === 'B';
@@ -38,7 +47,8 @@ export default function AssetTwin({ pair, riskHoldHours, onRemove, onAnalyse }: 
    * would paint a bearing orange and imply a problem that is not there.
    */
   const magnitude = Math.abs(pair.delta ?? 0);
-  const warming = !alarm && !noData && magnitude >= thresholdC * 0.6;
+  // Com a comparação suspensa o desvio não significa nada — não pode tingir mancal.
+  const warming = !alarm && !noData && !sensorOff && magnitude >= thresholdC * 0.6;
 
   const colorFor = (isAlarm: boolean, warm: boolean) =>
     isAlarm ? 'var(--critical)' : warm ? 'var(--serious)' : 'var(--surface-2)';
@@ -46,10 +56,20 @@ export default function AssetTwin({ pair, riskHoldHours, onRemove, onAnalyse }: 
   const bearingA = colorFor(alarmA, warming && hotA);
   const bearingB = colorFor(alarmB, warming && hotB);
 
+  const offName = offA ? shortName(pair.pointA.name) : offB ? shortName(pair.pointB.name) : null;
+  const offAcc = offA ? pair.peakAccA : offB ? pair.peakAccB : null;
+  /** A evidência numérica vive no tooltip: o card fica com a conclusão. */
+  const offEvidence =
+    offName != null && offAcc != null
+      ? `${offName} reads ${offAcc.toFixed(4)} g, below the ${mountedMinAccG} g needed to count as mounted, while its pair vibrates well above it.`
+      : undefined;
+
   const assetLabel = pair.assetName ?? `Asset ${pair.assetId}`;
 
   return (
-    <article className={`twin${alarm ? ' is-alarm' : ''}${noData ? ' is-nodata' : ''}`}>
+    <article
+      className={`twin${alarm ? ' is-alarm' : ''}${noData ? ' is-nodata' : ''}${sensorOff ? ' is-sensoroff' : ''}`}
+    >
       <header className="twin-head">
         <div className="twin-id">
           <h3>{assetLabel}</h3>
@@ -74,6 +94,14 @@ export default function AssetTwin({ pair, riskHoldHours, onRemove, onAnalyse }: 
               title={`This asset normally runs at ${signed1(pair.baselineC ?? 0)}; the hot side has swapped.`}
             >
               ⇄ Side inversion
+            </span>
+          )}
+          {sensorOff && (
+            <span
+              className="badge badge-sensoroff"
+              title={offEvidence}
+            >
+              ⚟ Sensor off the machine
             </span>
           )}
           {pair.status === 'NORMAL' && !pair.inverted && (
@@ -132,21 +160,30 @@ export default function AssetTwin({ pair, riskHoldHours, onRemove, onAnalyse }: 
         <circle cx={352} cy={116} r={9} fill="var(--surface-1)" stroke="var(--border-strong)" strokeWidth={1.5} />
 
         {/* sensor stem A */}
-        <line x1={88} y1={92} x2={88} y2={72} stroke="var(--border-strong)" strokeWidth={2} />
+        <line x1={88} y1={92} x2={88} y2={72}
+          stroke={offA ? 'var(--warning)' : 'var(--border-strong)'} strokeWidth={2}
+          strokeDasharray={offA ? '3 3' : undefined} />
         <circle cx={88} cy={64} r={9}
-          fill={alarmA ? 'var(--critical)' : 'var(--series-a)'}
-          stroke="var(--surface-1)" strokeWidth={2.5}
+          fill={alarmA ? 'var(--critical)' : offA ? 'none' : 'var(--series-a)'}
+          stroke={offA ? 'var(--warning)' : 'var(--surface-1)'}
+          strokeWidth={2.5}
+          strokeDasharray={offA ? '3 3' : undefined}
           className={alarmA ? 'alarm-mark' : undefined} />
 
         {/* sensor stem B */}
-        <line x1={352} y1={92} x2={352} y2={72} stroke="var(--border-strong)" strokeWidth={2} />
+        <line x1={352} y1={92} x2={352} y2={72}
+          stroke={offB ? 'var(--warning)' : 'var(--border-strong)'} strokeWidth={2}
+          strokeDasharray={offB ? '3 3' : undefined} />
         <circle cx={352} cy={64} r={9}
-          fill={alarmB ? 'var(--critical)' : 'var(--series-b)'}
-          stroke="var(--surface-1)" strokeWidth={2.5}
+          fill={alarmB ? 'var(--critical)' : offB ? 'none' : 'var(--series-b)'}
+          stroke={offB ? 'var(--warning)' : 'var(--surface-1)'}
+          strokeWidth={2.5}
+          strokeDasharray={offB ? '3 3' : undefined}
           className={alarmB ? 'alarm-mark' : undefined} />
 
         {/* reading A, with the moment it arrived */}
         <text x={88} y={30} textAnchor="middle" className="twin-temp"
+          opacity={offA ? 0.4 : 1}
           fill={alarmA ? 'var(--critical)' : 'var(--text-primary)'}>
           {pair.pointA.temp != null ? c1(pair.pointA.temp) : '—'}
         </text>
@@ -158,6 +195,7 @@ export default function AssetTwin({ pair, riskHoldHours, onRemove, onAnalyse }: 
 
         {/* reading B, with the moment it arrived */}
         <text x={352} y={30} textAnchor="middle" className="twin-temp"
+          opacity={offB ? 0.4 : 1}
           fill={alarmB ? 'var(--critical)' : 'var(--text-primary)'}>
           {pair.pointB.temp != null ? c1(pair.pointB.temp) : '—'}
         </text>
@@ -168,7 +206,12 @@ export default function AssetTwin({ pair, riskHoldHours, onRemove, onAnalyse }: 
         )}
 
         {/* deviation, at the centre of the roll */}
-        {pair.delta != null && (
+        {sensorOff && (
+          <text x={220} y={120} textAnchor="middle" className="twin-delta-sub">
+            comparison suspended
+          </text>
+        )}
+        {pair.delta != null && !sensorOff && (
           <>
             <text x={220} y={112} textAnchor="middle" className="twin-delta"
               fill={alarm ? 'var(--critical)' : 'var(--text-secondary)'}>
@@ -198,6 +241,12 @@ export default function AssetTwin({ pair, riskHoldHours, onRemove, onAnalyse }: 
         </span>
       </footer>
 
+      {sensorOff && offName && (
+        <p className="twin-sensoroff">
+          These two sensors do not appear to be on the same roll.{' '}
+          <strong>Inspection requested.</strong>
+        </p>
+      )}
       {pair.heldByRecentBreach && pair.lastBreachAt != null && (
         <p className="twin-held">
           Within the limit now · broke it {pair.breachCount}× in the last {riskHoldHours} h,

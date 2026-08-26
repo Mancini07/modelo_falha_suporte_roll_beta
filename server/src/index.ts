@@ -9,10 +9,10 @@ import {
   closePool,
 } from './postgres.js';
 import {
-  listPairs, addPair, removePair, updatePairThreshold, updatePairBaseline,
+  listPairs, addPair, removePair, updatePairSettings, updatePairBaseline,
 } from './pairsStore.js';
 import { evaluateBoard, learnBaseline } from './board.js';
-import { getTemperatureSeries } from './dynamo.js';
+import { getTemperatureSeries, getVibrationSeries } from './dynamo.js';
 import { pairSeries, diagnose, summarize } from './pairing.js';
 import type { AnalysisResult, PositionInfo } from './types.js';
 
@@ -58,6 +58,7 @@ app.get('/api/analysis', async (req, res) => {
       (p) => (p.pointA === a && p.pointB === b) || (p.pointA === b && p.pointB === a),
     );
     const thresholdC = match?.thresholdC ?? config.defaults.thresholdC;
+    const mountedMinAccG = match?.mountedMinAccG ?? config.mountedMinAccG;
 
     const since = Date.now() - days * 86_400_000;
 
@@ -67,13 +68,24 @@ app.get('/api/analysis', async (req, res) => {
       getTemperatureSeries(b, since),
     ]);
 
+    // A vibração é indexada pelo activatorId da placa, que só sai do Postgres,
+    // por isso vem depois da consulta de metadados.
+    const infoA = positions.get(a);
+    const infoB = positions.get(b);
+    const [vibrationA, vibrationB] = await Promise.all([
+      infoA?.activatorId ? getVibrationSeries(infoA.activatorId, since) : [],
+      infoB?.activatorId ? getVibrationSeries(infoB.activatorId, since) : [],
+    ]);
+
     const { pairs, discarded } = pairSeries(seriesA, seriesB, toleranceMs, thresholdC);
 
     const result: AnalysisResult = {
-      pointA: positions.get(a) ?? placeholder(a),
-      pointB: positions.get(b) ?? placeholder(b),
+      pointA: infoA ?? placeholder(a),
+      pointB: infoB ?? placeholder(b),
       seriesA,
       seriesB,
+      vibrationA,
+      vibrationB,
       pairs,
       discarded,
       diagnostics: diagnose(seriesA, seriesB, pairs, discarded),
@@ -82,6 +94,9 @@ app.get('/api/analysis', async (req, res) => {
         toleranceMs,
         days,
         temperatureOffsetC: config.temperatureOffsetC,
+        mountedMinAccG,
+        mountedIsCustom: match?.mountedMinAccG != null,
+        offMachineMinTempGapC: config.offMachineMinTempGapC,
       },
       summary: summarize(pairs, thresholdC),
     };
@@ -160,19 +175,35 @@ app.post('/api/pairs', async (req, res) => {
   }
 });
 
-/** Ajusta o limite tolerável de um ativo já cravado. */
+/**
+ * Ajusta os limites de um ativo já cravado: desvio tolerável e aceleração
+ * mínima para o sensor contar como montado. Campo ausente fica como está;
+ * campo vazio ou null volta ao padrão global.
+ */
 app.patch('/api/pairs/:id', async (req, res) => {
   try {
-    const raw = req.body?.thresholdC;
-    // null volta o ativo ao padrão global.
-    const thresholdC = raw == null || raw === '' ? null : Number(raw);
-    if (thresholdC != null && (!Number.isFinite(thresholdC) || thresholdC <= 0)) {
-      return res.status(400).json({ error: 'thresholdC precisa ser um número maior que zero' });
+    const patch: { thresholdC?: number | null; mountedMinAccG?: number | null } = {};
+
+    const parse = (raw: unknown, campo: string): number | null => {
+      if (raw == null || raw === '') return null;
+      const v = Number(raw);
+      if (!Number.isFinite(v) || v <= 0) {
+        throw new Error(`${campo} precisa ser um número maior que zero`);
+      }
+      return v;
+    };
+
+    if ('thresholdC' in (req.body ?? {})) {
+      patch.thresholdC = parse(req.body.thresholdC, 'thresholdC');
     }
-    const pair = await updatePairThreshold(req.params.id, thresholdC);
+    if ('mountedMinAccG' in (req.body ?? {})) {
+      patch.mountedMinAccG = parse(req.body.mountedMinAccG, 'mountedMinAccG');
+    }
+
+    const pair = await updatePairSettings(req.params.id, patch);
     res.status(pair ? 200 : 404).json(pair ?? { error: 'par não encontrado' });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    res.status(400).json({ error: (err as Error).message });
   }
 });
 

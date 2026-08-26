@@ -15,6 +15,9 @@ pulsam em vermelho.
 | Limite **por ativo** | opcional | no diálogo **+ Pin asset**, campo *Tolerable deviation* |
 | Tolerância de horário | **10 min** | campo no cabeçalho / `config.defaults.toleranceMin` |
 | Correção de temperatura | **−6,8 °C** | `TEMPERATURE_OFFSET_C` no `.env` |
+| Aceleração mínima montado **padrão** | **0,03 g** | `MOUNTED_MIN_ACC_G` no `.env` |
+| Aceleração mínima **por ativo** | opcional | tela **Analytics** → bloco *Vibration* → *Mounted threshold* |
+| Diferença de temperatura para confirmar | **10 °C** | `OFF_MACHINE_MIN_TEMP_GAP_C` no `.env` |
 
 Cada ativo tem sua assimetria normal entre mancais — um redutor grande tolera
 mais desvio que um rolo leve. Por isso o limite é **por ativo**: definido ao
@@ -62,6 +65,50 @@ a faixa tolerada e a tabela par a par.
 
 A navegação é pelo card: o botão **↗** no twin abre aquele ativo na Analytics, e
 **← Back to board** volta. Não há abas.
+
+## Sensor fora da máquina
+
+Um sensor solto não vibra, e a temperatura que ele lê é a do ambiente, não a do
+mancal. Comparar isso com o par do outro lado produz desvios enormes e
+completamente falsos.
+
+A regra exige **duas evidências independentes**:
+
+1. **Vibração** — qualquer eixo da aceleração RMS abaixo do mínimo enquanto o
+   par do mesmo ativo está acima e vibrando pelo menos o dobro.
+2. **Temperatura** — o sensor suspeito está pelo menos **10 °C mais frio** que o
+   par (`OFF_MACHINE_MIN_TEMP_GAP_C`). Um sensor solto lê o ambiente; se as duas
+   temperaturas estão próximas, ele provavelmente ainda está na máquina.
+
+Sem as duas, nada é declarado e o ativo continua sendo avaliado por lubrificação
+— errar para o lado de manter o alarme, não de silenciá-lo.
+
+Confirmadas as duas, aquele sensor está fora da máquina. Nesse caso o ativo sai de falha de lubrificação e passa ao estado
+**`SENSOR_FORA`** — o desvio deixa de ser mostrado, a inversão de lado é
+desconsiderada, e o card nomeia qual sensor precisa ser recolocado.
+
+### Ajuste por ativo, com o gráfico à vista
+
+Máquinas vibram diferente: um rolo leve montado pode ler menos que um redutor
+solto, então um único número não serve para todas.
+
+O ajuste fica na tela **Analytics**, dentro do bloco *Vibration*, logo acima do
+gráfico de aceleração. O limiar aparece como **linha tracejada âmbar sobre o
+próprio gráfico** e se move enquanto você arrasta o controle — dá para ver na
+hora onde a linha cai em relação às três séries de eixos.
+
+Ao lado, duas etiquetas mostram a menor aceleração de cada ponto e o veredito
+naquele valor (*mounted* / *off the machine*), atualizando junto. **Save for this
+asset** grava só para aquele ativo; **Use default** volta ao padrão global.
+
+Duas proteções contra falso positivo:
+
+- O par precisa estar **acima** do mínimo. Com os dois parados, quem está
+  desligada é a máquina, e nenhum sensor caiu.
+- O par precisa vibrar pelo menos **o dobro**. Sem isso, dois sensores
+  igualmente montados numa máquina de baixa vibração caem em lados opostos da
+  linha por milésimos de g — um marcado como solto, o outro não. Observado na
+  prática: 0,0299 g contra 0,0357 g.
 
 ## Retenção do risco (24 h)
 

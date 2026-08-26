@@ -27,6 +27,12 @@ export interface PinnedPair {
    * detectar quando os lados se invertem.
    */
   baselineC?: number;
+  /**
+   * Aceleração RMS mínima deste ativo, em g, para o sensor contar como montado.
+   * Cada máquina vibra o quanto vibra: um rolo leve montado pode ler menos que
+   * um redutor solto. Ausente = padrão global.
+   */
+  mountedMinAccG?: number;
   /** Janela de onde o baseline foi aprendido, para rastreabilidade. */
   baselineFrom?: string;
   baselineTo?: string;
@@ -74,17 +80,26 @@ export async function addPair(
   return pair;
 }
 
-/** Ajusta o limite de um par já cravado. */
-export async function updatePairThreshold(
+/**
+ * Ajusta os limites de um par já cravado. Campo ausente fica como está;
+ * campo com `null` volta ao padrão global.
+ */
+export async function updatePairSettings(
   id: string,
-  thresholdC: number | null,
+  patch: { thresholdC?: number | null; mountedMinAccG?: number | null },
 ): Promise<PinnedPair | null> {
   const pairs = await readAll();
   const pair = pairs.find((p) => p.id === id);
   if (!pair) return null;
 
-  if (thresholdC == null) delete pair.thresholdC;
-  else pair.thresholdC = thresholdC;
+  if ('thresholdC' in patch) {
+    if (patch.thresholdC == null) delete pair.thresholdC;
+    else pair.thresholdC = patch.thresholdC;
+  }
+  if ('mountedMinAccG' in patch) {
+    if (patch.mountedMinAccG == null) delete pair.mountedMinAccG;
+    else pair.mountedMinAccG = patch.mountedMinAccG;
+  }
 
   await writeAll(pairs);
   return pair;

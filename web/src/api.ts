@@ -46,14 +46,23 @@ export function pinPair(pair: NewPair) {
   });
 }
 
-/** Ajusta o limite de um ativo já cravado. `null` volta ao padrão global. */
-export function setPairThreshold(id: string, thresholdC: number | null) {
+/**
+ * Ajusta os limites de um ativo já cravado. Campo omitido fica como está;
+ * `null` volta ao padrão global.
+ */
+export function setPairSettings(
+  id: string,
+  patch: { thresholdC?: number | null; mountedMinAccG?: number | null },
+) {
   return json(`/api/pairs/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ thresholdC }),
+    body: JSON.stringify(patch),
   });
 }
+
+export const setPairThreshold = (id: string, thresholdC: number | null) =>
+  setPairSettings(id, { thresholdC });
 
 export interface BaselineResult {
   pair: { baselineC?: number; baselineFrom?: string; baselineTo?: string };

@@ -34,6 +34,7 @@ export default function BoardView({
     () => ({
       alarm: pairs.filter((p) => p.status === 'ALARME').length,
       normal: pairs.filter((p) => p.status === 'NORMAL').length,
+      sensorOff: pairs.filter((p) => p.status === 'SENSOR_FORA').length,
       idle: pairs.filter((p) => p.status === 'SEM_DADOS').length,
     }),
     [pairs],
@@ -79,6 +80,10 @@ export default function BoardView({
           <span className="sum-n">{counts.normal}</span>
           <span className="sum-k">✓ normal</span>
         </div>
+        <div className={`sum sum-sensoroff${counts.sensorOff > 0 ? ' is-on' : ''}`}>
+          <span className="sum-n">{counts.sensorOff}</span>
+          <span className="sum-k">⚟ sensor off machine</span>
+        </div>
         <div className="sum sum-idle">
           <span className="sum-n">{counts.idle}</span>
           <span className="sum-k">— no reading</span>
@@ -107,6 +112,7 @@ export default function BoardView({
             key={p.id}
             pair={p}
             riskHoldHours={board?.settings.riskHoldHours ?? 24}
+            mountedMinAccG={board?.settings.mountedMinAccG ?? 0.03}
             onRemove={onRemove}
             onAnalyse={onAnalyse}
           />

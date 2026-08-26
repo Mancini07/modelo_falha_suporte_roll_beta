@@ -1,7 +1,7 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { config } from './config.js';
-import type { TempSample } from './types.js';
+import type { TempSample, VibrationSample } from './types.js';
 
 const client = new DynamoDBClient({
   region: config.aws.region,
@@ -55,4 +55,57 @@ export async function getTemperatureSeries(
   } while (ExclusiveStartKey);
 
   return out.sort((x, y) => x.t - y.t);
+}
+
+/**
+ * Série de vibração de um ponto: aceleração RMS (g) e velocidade RMS (mm/s),
+ * nos três eixos.
+ *
+ * Fica numa tabela diferente da temperatura, indexada pelo `activatorId` da
+ * placa e com cadência horária — não pelo positionId como as séries de gráfico.
+ */
+const VIBRATION_TABLE = 'retina-daily-summary-boards';
+
+export async function getVibrationSeries(
+  boardId: string,
+  sinceMs: number,
+  untilMs: number = Date.now(),
+): Promise<VibrationSample[]> {
+  const out: VibrationSample[] = [];
+  let ExclusiveStartKey: Record<string, unknown> | undefined;
+
+  do {
+    const res = await doc.send(
+      new QueryCommand({
+        TableName: VIBRATION_TABLE,
+        KeyConditionExpression: 'boardId = :b AND #d BETWEEN :from AND :to',
+        ExpressionAttributeNames: { '#d': 'date' },
+        ExpressionAttributeValues: { ':b': boardId, ':from': sinceMs, ':to': untilMs },
+        ProjectionExpression:
+          '#d, accelerationRmsX, accelerationRmsY, accelerationRmsZ,' +
+          ' velocityRmsX, velocityRmsY, velocityRmsZ',
+        ExclusiveStartKey,
+      }),
+    );
+
+    for (const item of res.Items ?? []) {
+      const n = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : null);
+      const sample: VibrationSample = {
+        t: Number(item.date),
+        accX: n(item.accelerationRmsX),
+        accY: n(item.accelerationRmsY),
+        accZ: n(item.accelerationRmsZ),
+        velX: n(item.velocityRmsX),
+        velY: n(item.velocityRmsY),
+        velZ: n(item.velocityRmsZ),
+      };
+      // Registro sem nenhuma leitura de vibração não serve para o gráfico.
+      const hasAny = [sample.accX, sample.accY, sample.accZ,
+                      sample.velX, sample.velY, sample.velZ].some((v) => v != null);
+      if (hasAny) out.push(sample);
+    }
+    ExclusiveStartKey = res.LastEvaluatedKey;
+  } while (ExclusiveStartKey);
+
+  return out.sort((a, b) => a.t - b.t);
 }

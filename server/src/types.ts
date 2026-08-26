@@ -6,6 +6,20 @@ export interface TempSample {
   v: number;
 }
 
+/**
+ * Vibração de um ponto num instante: aceleração RMS em g e velocidade RMS em
+ * mm/s, nos eixos Horizontal (X), Vertical (Y) e Axial (Z).
+ */
+export interface VibrationSample {
+  t: number;
+  accX: number | null;
+  accY: number | null;
+  accZ: number | null;
+  velX: number | null;
+  velY: number | null;
+  velZ: number | null;
+}
+
 /** Identificação do ponto de medição (vem do Postgres). */
 export interface PositionInfo {
   positionId: number;
@@ -84,7 +98,21 @@ export interface PairState {
   /** defasagem entre as duas leituras, em ms */
   lagMs: number | null;
 
-  status: 'ALARME' | 'NORMAL' | 'SEM_DADOS';
+  status: 'ALARME' | 'NORMAL' | 'SEM_DADOS' | 'SENSOR_FORA';
+  /**
+   * Sensor com aceleração abaixo do mínimo enquanto o par do mesmo ativo está
+   * acima: indica sensor solto da máquina. Enquanto isso vale, a comparação de
+   * temperatura não diz nada sobre lubrificação.
+   */
+  offMachineA: boolean;
+  offMachineB: boolean;
+  /** maior aceleração RMS de cada ponto, em g — a evidência da regra acima */
+  peakAccA: number | null;
+  peakAccB: number | null;
+  /** aceleração mínima aplicada a este par (do ativo, ou o padrão global) */
+  mountedMinAccG: number;
+  /** true quando o mínimo veio do ativo, não do padrão */
+  mountedIsCustom: boolean;
   /** limite aplicado a este par (o do ativo, ou o padrão global) */
   thresholdC: number;
   /** true quando o limite veio do ativo, não do padrão */
@@ -119,6 +147,10 @@ export interface BoardResult {
     temperatureOffsetC: number;
     /** por quantas horas um rompimento mantém o ativo em risco */
     riskHoldHours: number;
+    /** aceleração RMS mínima, em g, para o sensor contar como montado */
+    mountedMinAccG: number;
+    /** quanto o sensor solto precisa estar mais frio que o par, em °C */
+    offMachineMinTempGapC: number;
   };
   generatedAt: number;
 }
@@ -128,6 +160,9 @@ export interface AnalysisResult {
   pointB: PositionInfo;
   seriesA: TempSample[];
   seriesB: TempSample[];
+  /** vibração de cada ponto, para os gráficos de aceleração e velocidade */
+  vibrationA: VibrationSample[];
+  vibrationB: VibrationSample[];
   pairs: ComparedPair[];
   discarded: DiscardedSample[];
   diagnostics: PairingDiagnostics;
@@ -137,6 +172,12 @@ export interface AnalysisResult {
     days: number;
     /** correção subtraída de toda leitura de temperatura, em °C */
     temperatureOffsetC: number;
+    /** aceleração RMS mínima deste par para o sensor contar como montado */
+    mountedMinAccG: number;
+    /** true quando esse mínimo veio do ativo, não do padrão */
+    mountedIsCustom: boolean;
+    /** quanto o sensor solto precisa estar mais frio que o par, em °C */
+    offMachineMinTempGapC: number;
   };
   summary: {
     /** par válido mais recente — o que define o estado atual do painel */

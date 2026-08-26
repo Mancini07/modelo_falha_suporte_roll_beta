@@ -1,9 +1,9 @@
 import { config } from './config.js';
-import { getTemperatureSeries } from './dynamo.js';
+import { getTemperatureSeries, getVibrationSeries } from './dynamo.js';
 import { getPositions } from './postgres.js';
 import { pairSeries } from './pairing.js';
 import type { PinnedPair } from './pairsStore.js';
-import type { BoardResult, PairState } from './types.js';
+import type { BoardResult, PairState, VibrationSample } from './types.js';
 
 /**
  * Janela de risco. Um rompimento do limite mantém o ativo em risco por este
@@ -21,6 +21,64 @@ const WINDOW_MS = RISK_HOLD_HOURS * 60 * 60 * 1000;
  * ativo E o giro foi maior que a tolerância dele. Sem essa segunda condição,
  * um ativo cujo normal é próximo de zero acusaria inversão a cada oscilação.
  */
+/**
+ * Menor aceleração RMS entre os três eixos da leitura mais recente.
+ *
+ * É o mínimo, e não o máximo: basta UM eixo apagado para denunciar um sensor
+ * que não está acoplado à máquina. Um sensor bem montado vibra nos três.
+ */
+export function minAcceleration(series: VibrationSample[]): number | null {
+  for (let i = series.length - 1; i >= 0; i--) {
+    const axes = [series[i].accX, series[i].accY, series[i].accZ].filter(
+      (v): v is number => v != null,
+    );
+    if (axes.length) return Math.min(...axes);
+  }
+  return null;
+}
+
+/**
+ * Quanto o par precisa vibrar a mais para o sensor quieto contar como solto.
+ *
+ * Sem isso, dois sensores igualmente montados numa máquina de baixa vibração
+ * caem em lados opostos da linha por milésimos de g — um marcado como solto,
+ * o outro não. A diferença precisa ser de natureza, não de arredondamento.
+ */
+const OFF_MACHINE_RATIO = 2;
+
+/**
+ * Um sensor está fora da máquina quando DUAS evidências independentes apontam
+ * para isso:
+ *
+ * 1. Vibração — ele está abaixo do mínimo enquanto o par, no mesmo ativo, está
+ *    acima e vibrando pelo menos o dobro. Com os dois parados quem está
+ *    desligada é a máquina, e nenhum sensor caiu.
+ * 2. Temperatura — ele está bem mais frio que o par. Um sensor solto lê o
+ *    ambiente, não o mancal; se as duas temperaturas estão próximas, o sensor
+ *    provavelmente ainda está na máquina e a suspeita não se sustenta.
+ *
+ * Sem as duas, nada é declarado e o ativo continua sendo avaliado por
+ * lubrificação — errar para o lado de manter o alarme, não de silenciá-lo.
+ */
+export function offMachine(args: {
+  minSelf: number | null;
+  minOther: number | null;
+  minG: number;
+  tempSelf: number | null;
+  tempOther: number | null;
+  minTempGapC: number;
+}) {
+  const { minSelf, minOther, minG, tempSelf, tempOther, minTempGapC } = args;
+
+  if (minSelf == null || minOther == null) return false;
+  if (minSelf >= minG || minOther < minG) return false;
+  if (minOther < minSelf * OFF_MACHINE_RATIO) return false;
+
+  // Sem as duas temperaturas não há como confirmar; não declara.
+  if (tempSelf == null || tempOther == null) return false;
+  return tempOther - tempSelf >= minTempGapC;
+}
+
 export function isInverted(
   delta: number,
   baselineC: number | null,
@@ -99,9 +157,11 @@ export async function evaluateBoard(
       };
 
       try {
-        const [a, b] = await Promise.all([
+        const [a, b, vibA, vibB] = await Promise.all([
           getTemperatureSeries(pin.pointA, since),
           getTemperatureSeries(pin.pointB, since),
+          infoA?.activatorId ? getVibrationSeries(infoA.activatorId, since) : Promise.resolve([]),
+          infoB?.activatorId ? getVibrationSeries(infoB.activatorId, since) : Promise.resolve([]),
         ]);
 
         const { pairs } = pairSeries(a, b, toleranceMs, thresholdC);
@@ -110,6 +170,28 @@ export async function evaluateBoard(
         // Basta um rompimento na janela para o ativo seguir em risco.
         const breaches = pairs.filter((p) => p.alarm);
         const lastBreachAt = breaches.length ? breaches[breaches.length - 1].t : null;
+
+        // Sensor solto invalida a comparação: a temperatura dele é do ambiente.
+        const peakAccA = minAcceleration(vibA);
+        const peakAccB = minAcceleration(vibB);
+        // Cada ativo pode ter seu próprio mínimo: máquinas vibram diferente.
+        const mountedIsCustom = pin.mountedMinAccG != null;
+        const minG = pin.mountedMinAccG ?? config.mountedMinAccG;
+        // As temperaturas do par simultâneo; sem par válido, as últimas lidas.
+        const tempA = latest ? latest.a : (a[a.length - 1]?.v ?? null);
+        const tempB = latest ? latest.b : (b[b.length - 1]?.v ?? null);
+        const minTempGapC = config.offMachineMinTempGapC;
+
+        const offA = offMachine({
+          minSelf: peakAccA, minOther: peakAccB, minG,
+          tempSelf: tempA, tempOther: tempB, minTempGapC,
+        });
+        const offB = offMachine({
+          minSelf: peakAccB, minOther: peakAccA, minG,
+          tempSelf: tempB, tempOther: tempA, minTempGapC,
+        });
+        const anyOff = offA || offB;
+
 
         const lastA = a[a.length - 1] ?? null;
         const lastB = b[b.length - 1] ?? null;
@@ -129,18 +211,28 @@ export async function evaluateBoard(
           t: latest ? latest.tB : lastB?.t ?? null,
         };
 
+        const sensorFlags = {
+          offMachineA: offA,
+          offMachineB: offB,
+          peakAccA,
+          peakAccB,
+          mountedMinAccG: minG,
+          mountedIsCustom,
+        };
+
         if (!latest) {
           return {
             ...base,
+            ...sensorFlags,
             pointA,
             pointB,
             delta: null,
             t: null,
             lagMs: null,
-            status: 'SEM_DADOS',
+            status: anyOff ? 'SENSOR_FORA' : 'SEM_DADOS',
             inverted: false,
-            breachCount: breaches.length,
-            lastBreachAt,
+            breachCount: 0,
+            lastBreachAt: null,
             heldByRecentBreach: false,
             hotter: null,
             reason:
@@ -152,16 +244,21 @@ export async function evaluateBoard(
 
         return {
           ...base,
+          ...sensorFlags,
           pointA,
           pointB,
           delta: latest.delta,
           t: latest.t,
           lagMs: latest.lagMs,
-          status: latest.alarm || breaches.length > 0 ? 'ALARME' : 'NORMAL',
-          inverted: isInverted(latest.delta, baselineC, thresholdC),
-          breachCount: breaches.length,
-          lastBreachAt,
-          heldByRecentBreach: !latest.alarm && breaches.length > 0,
+          status: anyOff
+            ? 'SENSOR_FORA'
+            : latest.alarm || breaches.length > 0
+              ? 'ALARME'
+              : 'NORMAL',
+          inverted: anyOff ? false : isInverted(latest.delta, baselineC, thresholdC),
+          breachCount: anyOff ? 0 : breaches.length,
+          lastBreachAt: anyOff ? null : lastBreachAt,
+          heldByRecentBreach: anyOff ? false : !latest.alarm && breaches.length > 0,
           hotter: latest.delta === 0 ? null : latest.delta > 0 ? 'A' : 'B',
         };
       } catch (err) {
@@ -169,6 +266,12 @@ export async function evaluateBoard(
           ...base,
           pointA: { positionId: pin.pointA, name: infoA?.positionName ?? `Ponto ${pin.pointA}`, temp: null, t: null },
           pointB: { positionId: pin.pointB, name: infoB?.positionName ?? `Ponto ${pin.pointB}`, temp: null, t: null },
+          offMachineA: false,
+          offMachineB: false,
+          peakAccA: null,
+          peakAccB: null,
+          mountedMinAccG: pin.mountedMinAccG ?? config.mountedMinAccG,
+          mountedIsCustom: pin.mountedMinAccG != null,
           delta: null,
           t: null,
           lagMs: null,
@@ -186,7 +289,7 @@ export async function evaluateBoard(
 
   // O que precisa de ação sobe ao topo: alarme primeiro, e a inversão pesa
   // junto — um lado que trocou de lugar merece atenção mesmo sem romper o limite.
-  const rank = { ALARME: 0, NORMAL: 1, SEM_DADOS: 2 } as const;
+  const rank = { ALARME: 0, SENSOR_FORA: 1, NORMAL: 2, SEM_DADOS: 3 } as const;
   const score = (s: PairState) => rank[s.status] - (s.inverted ? 0.5 : 0);
   states.sort((x, y) => {
     if (score(x) !== score(y)) return score(x) - score(y);
@@ -199,6 +302,8 @@ export async function evaluateBoard(
       thresholdC: defaultThresholdC,
       toleranceMs,
       riskHoldHours: RISK_HOLD_HOURS,
+      mountedMinAccG: config.mountedMinAccG,
+      offMachineMinTempGapC: config.offMachineMinTempGapC,
       temperatureOffsetC: config.temperatureOffsetC,
     },
     generatedAt: Date.now(),

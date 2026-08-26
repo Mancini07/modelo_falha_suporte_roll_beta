@@ -18,7 +18,15 @@ export interface PairState {
   delta: number | null;
   t: number | null;
   lagMs: number | null;
-  status: 'ALARME' | 'NORMAL' | 'SEM_DADOS';
+  status: 'ALARME' | 'NORMAL' | 'SEM_DADOS' | 'SENSOR_FORA';
+  /** sensor solto da máquina — a temperatura dele não é a do mancal */
+  offMachineA: boolean;
+  offMachineB: boolean;
+  /** menor aceleração RMS entre os eixos de cada ponto, em g */
+  peakAccA: number | null;
+  peakAccB: number | null;
+  mountedMinAccG: number;
+  mountedIsCustom: boolean;
   /** limite aplicado a este par (o do ativo, ou o padrão global) */
   thresholdC: number;
   /** true quando o limite veio do ativo, não do padrão */
@@ -44,6 +52,8 @@ export interface BoardResult {
     toleranceMs: number;
     temperatureOffsetC: number;
     riskHoldHours: number;
+    mountedMinAccG: number;
+    offMachineMinTempGapC: number;
   };
   generatedAt: number;
 }
@@ -92,6 +102,17 @@ export interface Company {
 
 export interface TempSample { t: number; v: number }
 
+/** Vibração num instante: aceleração RMS (g) e velocidade RMS (mm/s) por eixo. */
+export interface VibrationSample {
+  t: number;
+  accX: number | null;
+  accY: number | null;
+  accZ: number | null;
+  velX: number | null;
+  velY: number | null;
+  velZ: number | null;
+}
+
 export interface PositionInfo {
   positionId: number;
   positionName: string;
@@ -136,6 +157,8 @@ export interface AnalysisResult {
   pointB: PositionInfo;
   seriesA: TempSample[];
   seriesB: TempSample[];
+  vibrationA: VibrationSample[];
+  vibrationB: VibrationSample[];
   pairs: ComparedPair[];
   discarded: DiscardedSample[];
   diagnostics: PairingDiagnostics;
@@ -144,10 +167,19 @@ export interface AnalysisResult {
     toleranceMs: number;
     days: number;
     temperatureOffsetC: number;
+    mountedMinAccG: number;
+    mountedIsCustom: boolean;
+    offMachineMinTempGapC: number;
   };
   summary: {
     latest: ComparedPair | null;
-    status: 'ALARME' | 'NORMAL' | 'SEM_DADOS';
+    status: 'ALARME' | 'NORMAL' | 'SEM_DADOS' | 'SENSOR_FORA';
+  /** sensor solto da máquina — a temperatura dele não é a do mancal */
+  offMachineA: boolean;
+  offMachineB: boolean;
+  /** menor aceleração RMS entre os eixos de cada ponto, em g */
+  peakAccA: number | null;
+  peakAccB: number | null;
     alarmCount: number;
     alarmRatio: number;
     maxAbsDelta: number | null;

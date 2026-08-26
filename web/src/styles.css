@@ -18,6 +18,12 @@
   --series-a: #2a78d6;
   --series-b: #eb6834;
 
+  /* Eixos da máquina. Paleta própria: azul e laranja identificam os pontos e
+     não podem significar duas coisas. Validada para daltonismo. */
+  --axis-h: #4a3aa7;
+  --axis-v: #eda100;
+  --axis-a: #1baf7a;
+
   /* Cor de ação da interface. Separada das cores de série: azul e laranja
      identificam os pontos nos gráficos e não podem virar cor de botão. */
   --accent:       #00595F;
@@ -48,6 +54,9 @@
     --text-muted:     #8c93a3;
     --series-a: #3987e5;
     --series-b: #d95926;
+    --axis-h: #9085e9;
+    --axis-v: #c98500;
+    --axis-a: #199e70;
     --accent:      #00595F;
     --accent-edge: color-mix(in srgb, var(--accent) 45%, white);
     --critical-wash: #2E1D26;
@@ -68,6 +77,9 @@
   --text-muted:     #8c93a3;
   --series-a: #3987e5;
   --series-b: #d95926;
+  --axis-h: #9085e9;
+  --axis-v: #c98500;
+  --axis-a: #199e70;
   --accent:      #00595F;
   --accent-edge: color-mix(in srgb, var(--accent) 45%, white);
   --critical-wash: #2E1D26;
@@ -159,6 +171,8 @@ button:focus-visible { outline: 2px solid var(--accent-edge); outline-offset: 2p
 .sum-alarm.is-on { background: var(--critical-wash); border-color: var(--critical); }
 .sum-alarm.is-on .sum-n, .sum-alarm.is-on .sum-k { color: var(--critical); }
 .sum-ok .sum-n { color: var(--good); }
+.sum-sensoroff.is-on { background: color-mix(in srgb, var(--warning) 12%, var(--surface-1)); border-color: var(--warning); }
+.sum-sensoroff.is-on .sum-n, .sum-sensoroff.is-on .sum-k { color: var(--warning); }
 .sum-note { background: transparent; border-style: dashed; }
 
 /* --- grade de gêmeos ---------------------------------------------------- */
@@ -234,6 +248,18 @@ button:focus-visible { outline: 2px solid var(--accent-edge); outline-offset: 2p
   color: var(--warning);
 }
 .badge-idle  { background: var(--surface-2); color: var(--text-muted); }
+/* Sensor solto é problema de instalação, não de máquina: âmbar, distinto do
+   vermelho de falha. Vem com ícone e rótulo, nunca só a cor. */
+.badge-sensoroff {
+  background: color-mix(in srgb, var(--warning) 18%, var(--surface-1));
+  color: var(--warning);
+}
+.twin.is-sensoroff { border-color: color-mix(in srgb, var(--warning) 55%, var(--border)); }
+.twin-sensoroff {
+  margin: 8px 0 0; font-size: 11.5px; line-height: 1.5;
+  color: var(--text-secondary);
+}
+.twin-sensoroff strong { color: var(--warning); font-weight: 640; }
 
 .twin-svg { display: block; width: 100%; height: auto; margin: 2px 0 0; }
 .twin-temp { font-size: 21px; font-weight: 680; font-variant-numeric: tabular-nums; }

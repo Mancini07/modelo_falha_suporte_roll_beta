@@ -95,6 +95,54 @@
 }
 
 /* --- legenda e gráficos ------------------------------------------------- */
+/* --- seletor de eixo ----------------------------------------------------- */
+.axis-switch {
+  display: inline-flex; flex-wrap: wrap; gap: 3px; padding: 3px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px;
+}
+.axis-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 4px 12px; border-radius: 7px; font-size: 12.5px; font-weight: 560;
+  background: transparent; border: 1px solid transparent; color: var(--text-secondary);
+}
+.axis-btn:hover:not(.is-active) { background: var(--surface-1); color: var(--text-primary); }
+.axis-btn.is-active {
+  background: var(--surface-1); color: var(--text-primary); border-color: var(--border);
+}
+
+/* --- ajuste do limiar de sensor montado ---------------------------------- */
+.mount-tuner {
+  margin: 14px 0 4px; padding: 14px 16px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 11px;
+  display: flex; flex-direction: column; gap: 11px;
+}
+.mount-head h4 {
+  margin: 0 0 3px; font-size: 11.5px; font-weight: 620;
+  letter-spacing: .05em; text-transform: uppercase; color: var(--text-secondary);
+}
+.mount-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.mount-controls input[type="range"] { flex: 1 1 220px; min-width: 180px; accent-color: var(--warning); }
+.mount-number { width: 96px; }
+.mount-verdict { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; }
+.mount-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 5px 12px; border-radius: 999px; font-size: 12px;
+  background: var(--surface-1); border: 1px solid var(--border); color: var(--text-secondary);
+}
+.mount-pill strong { color: var(--text-primary); font-variant-numeric: tabular-nums; font-weight: 620; }
+.mount-pill.is-off {
+  border-color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 14%, var(--surface-1));
+  color: var(--warning);
+}
+.mount-pill.is-off strong { color: var(--warning); }
+.mount-head em { font-style: normal; font-weight: 620; color: var(--text-primary); }
+
+.chart-title {
+  margin: 18px 0 2px; font-size: 12px; font-weight: 620;
+  letter-spacing: .04em; text-transform: uppercase; color: var(--text-secondary);
+}
+
 .legend { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
 .legend-item { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-secondary); }
 .legend-swatch { width: 16px; height: 3px; border-radius: 2px; flex: none; }
