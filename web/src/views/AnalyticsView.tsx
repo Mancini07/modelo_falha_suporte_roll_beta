@@ -8,6 +8,7 @@ import PairTable from '../components/analytics/PairTable';
 import OccurrenceTimeline from '../components/analytics/OccurrenceTimeline';
 import VibrationChart, { AXES } from '../components/analytics/VibrationChart';
 import { minutes } from '../format.en';
+import { retinaPositionUrl } from '../retina';
 
 interface Props {
   /** Pinned pairs from the board, offered as ready-made choices. */
@@ -175,6 +176,32 @@ export default function AnalyticsView({ pinned, thresholdC, toleranceMin, initia
           <span className="chip">tolerance {settings.toleranceMin} min</span>
         </div>
       </header>
+
+      {data && (
+        <nav className="retina-links" aria-label="Open point in Retina">
+          <span className="retina-label">Open in Retina</span>
+          {[
+            { point: data.pointA, color: 'var(--series-a)' },
+            { point: data.pointB, color: 'var(--series-b)' },
+          ].map(({ point, color }) => {
+            const href = retinaPositionUrl(point);
+            if (!href) return null;
+            return (
+              <a
+                key={point.positionId}
+                className="retina-link"
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <i className="dot" style={{ background: color }} />
+                {point.positionName}
+                <span aria-hidden="true">↗</span>
+              </a>
+            );
+          })}
+        </nav>
+      )}
 
       <section className="card">
         <div className="controls">

@@ -38,6 +38,7 @@ export async function getPositions(ids: number[]): Promise<Map<number, PositionI
             p."assetId",
             p."lastAcquisitionDate",
             a.name                     AS "assetName",
+            f.id                       AS "facilityId",
             f.name                     AS "facilityName",
             co.id                      AS "companyId",
             co.name                    AS "companyName"
@@ -58,6 +59,7 @@ export async function getPositions(ids: number[]): Promise<Map<number, PositionI
       activatorId: r.activatorId,
       assetId: r.assetId,
       assetName: r.assetName,
+      facilityId: r.facilityId,
       facilityName: r.facilityName,
       companyId: r.companyId,
       companyName: r.companyName?.trim() ?? null,

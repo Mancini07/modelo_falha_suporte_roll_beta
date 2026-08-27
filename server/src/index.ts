@@ -33,6 +33,7 @@ function placeholder(id: number): PositionInfo {
     activatorId: null,
     assetId: null,
     assetName: null,
+    facilityId: null,
     facilityName: null,
     companyId: null,
     companyName: null,

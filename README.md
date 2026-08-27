@@ -59,7 +59,12 @@ atributo, e para seguir a preferência do sistema, trocá-lo por nada.
 cada 60 s. É a tela inicial. Sob cada temperatura fica o horário exato em que
 aquela leitura chegou, o que expõe de imediato um sensor fora de sincronia.
 
-**Analytics** — a visão analítica de um par: estado atual (desvio, as duas
+**Analytics** — logo abaixo do título, dois atalhos **Open in Retina** abrem
+cada ponto direto no sistema, em nova aba
+(`/companies/{companyId}/facilities?facilityId=&positionId=&mode=management&tab=GENERAL_DASHBOARD`).
+O endereço base é `VITE_RETINA_BASE_URL`, com a produção como padrão.
+
+A visão analítica de um par: estado atual (desvio, as duas
 temperaturas e o pico do período), as duas séries no mesmo eixo, o desvio contra
 a faixa tolerada e a tabela par a par.
 

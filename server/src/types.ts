@@ -27,6 +27,7 @@ export interface PositionInfo {
   activatorId: string | null;
   assetId: number | null;
   assetName: string | null;
+  facilityId: number | null;
   facilityName: string | null;
   companyId: number | null;
   companyName: string | null;
