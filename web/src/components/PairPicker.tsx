@@ -18,6 +18,7 @@ interface Props {
   }) => void;
   onUpdateThreshold: (id: string, thresholdC: number | null) => void;
   onLearnBaseline: (id: string, window: { from: string; to: string } | null) => void;
+  onDeviationMode: (id: string, mode: 'ABSOLUTE' | 'RELATIVE') => void;
   onClose: () => void;
 }
 
@@ -32,7 +33,8 @@ interface Row {
 }
 
 export default function PairPicker({
-  tree, pinned, defaultThresholdC, busy, onPin, onUpdateThreshold, onLearnBaseline, onClose,
+  tree, pinned, defaultThresholdC, busy, onPin, onUpdateThreshold, onLearnBaseline,
+  onDeviationMode, onClose,
 }: Props) {
   const [query, setQuery] = useState('');
   const [facility, setFacility] = useState('todas');
@@ -220,6 +222,50 @@ export default function PairPicker({
                     >
                       {busy ? 'Saving…' : 'Update limit'}
                     </button>
+
+                    <div className="picker-baseline">
+                      <h4>Deviation measured against</h4>
+                      <p className="picker-hint">
+                        An asset whose sides are permanently apart alarms all the time under{' '}
+                        <strong>zero</strong>. Measuring against its own normal only alarms when
+                        the machine departs from what it has always been.
+                      </p>
+                      <div className="axis-switch">
+                        <button
+                          className={`axis-btn${existing.deviationMode === 'ABSOLUTE' ? ' is-active' : ''}`}
+                          aria-pressed={existing.deviationMode === 'ABSOLUTE'}
+                          disabled={busy}
+                          onClick={() => onDeviationMode(existing.id, 'ABSOLUTE')}
+                        >
+                          Zero
+                        </button>
+                        <button
+                          className={`axis-btn${existing.deviationMode === 'RELATIVE' ? ' is-active' : ''}`}
+                          aria-pressed={existing.deviationMode === 'RELATIVE'}
+                          disabled={busy || existing.baselineC == null}
+                          title={
+                            existing.baselineC == null
+                              ? 'Learn the asset normal below before using it as the reference.'
+                              : undefined
+                          }
+                          onClick={() => onDeviationMode(existing.id, 'RELATIVE')}
+                        >
+                          Asset normal
+                          {existing.baselineC != null &&
+                            ` (${existing.baselineC > 0 ? '+' : ''}${existing.baselineC} °C)`}
+                        </button>
+                      </div>
+                      {existing.deviationMode === 'RELATIVE' && existing.baselineC != null && (
+                        <p className="picker-hint">
+                          Alarms when the deviation leaves{' '}
+                          <strong>
+                            {(existing.baselineC - existing.thresholdC).toFixed(1)} …{' '}
+                            {(existing.baselineC + existing.thresholdC).toFixed(1)} °C
+                          </strong>
+                          .
+                        </p>
+                      )}
+                    </div>
 
                     <div className="picker-baseline">
                       <h4>Normal side</h4>

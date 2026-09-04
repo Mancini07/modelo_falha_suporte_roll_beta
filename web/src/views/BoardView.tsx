@@ -17,13 +17,16 @@ interface Props {
   }) => Promise<void>;
   onUpdateThreshold: (id: string, thresholdC: number | null) => Promise<void>;
   onLearnBaseline: (id: string, window: { from: string; to: string } | null) => Promise<void>;
+  onDeviationMode: (id: string, mode: 'ABSOLUTE' | 'RELATIVE') => Promise<void>;
   onRemove: (id: string) => void;
   onAnalyse: (pairId: string) => void;
+  onOpenLines: () => void;
 }
 
 export default function BoardView({
   board, tree, busy, error, thresholdC, toleranceMin,
-  onTolerance, onPin, onUpdateThreshold, onLearnBaseline, onRemove, onAnalyse,
+  onTolerance, onPin, onUpdateThreshold, onLearnBaseline, onDeviationMode,
+  onRemove, onAnalyse, onOpenLines,
 }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pinning, setPinning] = useState(false);
@@ -65,6 +68,7 @@ export default function BoardView({
             />
             <span className="unit">min</span>
           </div>
+          <button onClick={onOpenLines}>Line overview</button>
           <button className="primary" onClick={() => setPickerOpen(true)}>+ Pin asset</button>
         </div>
       </header>
@@ -115,6 +119,7 @@ export default function BoardView({
             mountedMinAccG={board?.settings.mountedMinAccG ?? 0.03}
             onRemove={onRemove}
             onAnalyse={onAnalyse}
+            onQuickLimit={(id, v) => onUpdateThreshold(id, v)}
           />
         ))}
       </div>
@@ -147,6 +152,14 @@ export default function BoardView({
             setPinning(true);
             try {
               await onLearnBaseline(id, window);
+            } finally {
+              setPinning(false);
+            }
+          }}
+          onDeviationMode={async (id, mode) => {
+            setPinning(true);
+            try {
+              await onDeviationMode(id, mode);
             } finally {
               setPinning(false);
             }

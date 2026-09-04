@@ -30,6 +30,12 @@ export function pairSeries(
   b: TempSample[],
   toleranceMs: number,
   thresholdC: number,
+  /**
+   * Desvio de referência, em °C. Zero mede contra a igualdade entre os lados;
+   * o normal do ativo mede contra a assimetria que ele sempre teve. Máquinas
+   * com um lado permanentemente mais quente só têm alarme útil com o segundo.
+   */
+  reference = 0,
 ): { pairs: ComparedPair[]; discarded: DiscardedSample[] } {
   const pairs: ComparedPair[] = [];
   const discarded: DiscardedSample[] = [];
@@ -59,7 +65,7 @@ export function pairSeries(
       b: match.v,
       lagMs,
       delta,
-      alarm: Math.abs(delta) > thresholdC,
+      alarm: Math.abs(delta - reference) > thresholdC,
     });
   }
 
@@ -89,6 +95,7 @@ export function diagnose(
   b: TempSample[],
   pairs: ComparedPair[],
   discarded: DiscardedSample[],
+  stopped = 0,
 ): PairingDiagnostics {
   const lags = nearestLags(a, b);
   const sorted = [...lags].sort((x, y) => x - y);
@@ -98,6 +105,7 @@ export function diagnose(
     samplesB: b.length,
     paired: pairs.length,
     discarded: discarded.length,
+    stopped,
     minLagMs: sorted.length ? sorted[0] : null,
     medianLagMs: sorted.length ? sorted[Math.floor(sorted.length / 2)] : null,
     yieldByToleranceMin: CANDIDATE_TOLERANCES_MIN.map((toleranceMin) => ({

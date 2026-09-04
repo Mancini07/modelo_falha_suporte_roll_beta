@@ -17,7 +17,8 @@ pulsam em vermelho.
 | Correção de temperatura | **−6,8 °C** | `TEMPERATURE_OFFSET_C` no `.env` |
 | Aceleração mínima montado **padrão** | **0,03 g** | `MOUNTED_MIN_ACC_G` no `.env` |
 | Aceleração mínima **por ativo** | opcional | tela **Analytics** → bloco *Vibration* → *Mounted threshold* |
-| Diferença de temperatura para confirmar | **10 °C** | `OFF_MACHINE_MIN_TEMP_GAP_C` no `.env` |
+| Diferença de temperatura para confirmar | **25 °C** | `OFF_MACHINE_MIN_TEMP_GAP_C` no `.env` |
+| Aceleração mínima em operação | **0,03 g** | `RUNNING_MIN_ACC_G` no `.env` |
 
 Cada ativo tem sua assimetria normal entre mancais — um redutor grande tolera
 mais desvio que um rolo leve. Por isso o limite é **por ativo**: definido ao
@@ -81,7 +82,7 @@ A regra exige **duas evidências independentes**:
 
 1. **Vibração** — qualquer eixo da aceleração RMS abaixo do mínimo enquanto o
    par do mesmo ativo está acima e vibrando pelo menos o dobro.
-2. **Temperatura** — o sensor suspeito está pelo menos **10 °C mais frio** que o
+2. **Temperatura** — o sensor suspeito está pelo menos **25 °C mais frio** que o
    par (`OFF_MACHINE_MIN_TEMP_GAP_C`). Um sensor solto lê o ambiente; se as duas
    temperaturas estão próximas, ele provavelmente ainda está na máquina.
 
@@ -115,6 +116,28 @@ Duas proteções contra falso positivo:
   linha por milésimos de g — um marcado como solto, o outro não. Observado na
   prática: 0,0299 g contra 0,0357 g.
 
+## Máquina parada
+
+Com a máquina parada os mancais esfriam em ritmos diferentes, e o desvio entre
+os lados passa a refletir inércia térmica, não lubrificação. Essas comparações
+são **descartadas** antes de qualquer avaliação.
+
+Parada = a maior aceleração RMS dos **dois** sensores abaixo de `RUNNING_MIN_ACC_G`
+(0,03 g). Basta um lado acusar movimento para a máquina contar como rodando.
+
+O limiar é separado de `mountedMinAccG` de propósito: aquele foi afrouxado em
+vários ativos (0,007 a 0,0265 g) para não acusar sensor solto, e reaproveitá-lo
+aqui deixaria a detecção de parada cega. Medido nos 12 ativos, 0,05 g já
+classificava 65–73% das comparações dos Main Drive Rolls como parada — máquina
+rodando lida como parada. Em 0,02 e 0,03 g o resultado é estável.
+
+A vibração é horária e a temperatura de 20 em 20 min, então a leitura de vibração
+mais próxima vale por até 90 min. Sem vibração por perto a comparação é
+**mantida**: não dá para provar que estava parada, e descartar dado bom é pior
+que manter dado duvidoso.
+
+A tela Analytics informa quantas comparações foram descartadas por esse motivo.
+
 ## Retenção do risco (24 h)
 
 A temperatura oscila em torno do limite, então um ativo poderia entrar e sair de
@@ -126,6 +149,31 @@ mostra a linha *"Within the limit now · broke it 14× in the last 24 h, last at
 — o estado é honesto sobre a diferença entre "rompendo agora" e "rompeu há
 pouco". Nesse caso os mancais não são pintados de vermelho: nenhum lado está
 rompendo neste instante.
+
+## Contra o que o desvio é medido
+
+Alguns ativos têm um lado permanentemente mais quente. O SC6 D-Beam Support Roll
+roda há 30 dias com mediana de −11 °C e medianas por janela entre −9,7 e −13,0:
+a assimetria é estrutural, não uma falha. Medindo contra zero, ele passa **91% do
+tempo em alarme** — ruído puro, e um alarme que toca sempre não é alarme.
+
+Cada ativo escolhe a referência, no diálogo do ativo (*Deviation measured
+against*):
+
+- **Zero** (padrão) — os dois lados deveriam estar iguais. Serve para a maioria.
+- **Asset normal** — mede contra o normal aprendido do ativo. Alarma quando a
+  máquina se afasta do que ela sempre foi, e não por ser assimétrica.
+
+No modo relativo, a faixa saudável deixa de ser `−limite … +limite` e passa a ser
+`normal −limite … normal +limite`, mostrada no diálogo **e desenhada no gráfico
+de desvio**: a faixa cinza acompanha a referência e uma linha pontilhada marca o
+normal do ativo. O gráfico e a regra dizem a mesma coisa. Só fica
+disponível depois de aprender o normal, logo abaixo — sem referência não há o que
+medir contra.
+
+Aplicado ao SC6 D-Beam: de **91% para 34%** do período em alarme. E o que sobra é
+sinal: ele está hoje em −20,3 °C contra um normal de −11,3, ou seja, **9 °C pior
+que o próprio padrão**.
 
 ## Inversão de lado
 
@@ -183,6 +231,49 @@ Como a interface é inglesa, o rótulo do diagnóstico vem de `tbDiagnostic.name
 e os 8 status são traduzidos no servidor (`STATUS_EN` em `postgres.ts`) — a
 tabela só guarda o rótulo em português.
 
+## Visão por linha
+
+Comparar o mesmo lado entre rolos diferentes é um sinal por si só: se todos os
+mancais do lado motriz da linha rodam perto de 47 °C e um roda a 60, esse um se
+denuncia sem precisar de par.
+
+**Line overview**, no botão do painel, agrupa os pontos de uma linha
+(SC1, SC2, RS7…) por **lado da máquina** — motriz, oposto e lado não nomeado —
+ordenados do mais quente, com a mediana do grupo e o afastamento de cada ponto.
+Quem passa do limiar (ajustável no cabeçalho) fica destacado em âmbar.
+
+**As abas vêm agrupadas por unidade.** A linha vem do prefixo do nome do ativo e
+não existe como campo no banco, então "SC1" só é único dentro de uma planta —
+`/api/line` exige `facilityId` por isso. Comparar rolos de plantas diferentes
+não diria nada.
+
+**Só rolos entram.** Bomba, motor, redutor e eixo rodam em outro patamar térmico
+e puxariam a mediana do grupo. O nome sozinho não resolve: `SC1 Cooling Roll
+Tension Unit`, `SC3 S-Roll Hot Oil Pump` e `RS7 - Bomba Óleo Térmico Rolo
+Gravado` trazem "Roll"/"Rolo" e não são rolos — daí a lista de exclusão em
+`ROLL_ONLY` (`postgres.ts`). Linhas sem nenhum rolo, como a RS8, somem da tela.
+
+O lado vem do nome do ponto, e há **duas convenções na planta**: `DS`/`ODS` nas
+unidades dos EUA e `LA`/`LOA` nas do Brasil. As duas são reconhecidas. Gravataí
+ainda nomeia pontos como `Mancal LE/LD` e `Eixo de Entrada/Saída`, que não dizem
+lado motriz — esses caem no grupo **Side not named**.
+
+Leitura de temperatura parada há **mais de 24 h** aparece apagada e fica **fora
+da mediana**: um ponto pode ter deixado de reportar temperatura meses atrás com
+a vibração ainda viva, e compará-lo com o resto seria ruído.
+
+Aqui a temperatura vem de `tbPositionLastValue`, não do DynamoDB: interessa o
+retrato do momento de dezenas de pontos, e uma consulta só resolve.
+
+## Ajuste rápido do limite
+
+Cada card do painel tem o campo **Limit** no rodapé. Digite e pressione Enter —
+grava direto naquele ativo, sem abrir o diálogo. Esc desfaz. O selo `asset`
+indica limite próprio; sem ele, o ativo usa o padrão global.
+
+O diálogo completo continua sendo o lugar do normal do ativo, do modo de
+referência e do limiar de sensor montado.
+
 ## Ativos cravados
 
 Os pares ficam gravados em `server/data/pairs.json` e sobrevivem ao restart. Em
@@ -223,6 +314,8 @@ menos dois pontos aparecem no seletor — um ponto sozinho não tem par.
 | `POST /api/pairs/:id/baseline` | aprende o normal de uma janela (`{"from","to"}`), grava na mão (`{"baselineC"}`) ou limpa (`{}`) |
 | `GET /api/companies` | empresas com pontos de temperatura ativos |
 | `GET /api/occurrences?assetId=` | linha do tempo de ocorrências de um ativo |
+| `GET /api/lines?companyId=5` | linhas de produção com rolos, por unidade |
+| `GET /api/line?companyId=5&facilityId=434&line=SC1` | os rolos de uma linha, com a temperatura atual |
 | `GET /api/analysis?a=&b=&days=` | série completa de um par (usada para investigação; o painel não consome) |
 
 O `/api/board` lê só as últimas 12 h — sem gráficos, basta a comparação válida

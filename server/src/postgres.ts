@@ -408,6 +408,128 @@ export async function getOccurrenceHistory(
   return { occurrences, total };
 }
 
+/**
+ * Linha de produção: o prefixo do nome do ativo (SC1, SC2, RS7…). Não existe
+ * como campo no banco, então é extraído do nome — é assim que a planta nomeia.
+ */
+const LINE_PREFIX = '^(SC[0-9]+|RS[0-9]+)';
+
+/**
+ * Nesta visão só entram rolos: é entre mancais de rolo que a comparação de
+ * temperatura por lado faz sentido. Bombas, motores, redutores e eixos rodam
+ * em outro patamar térmico e só sujariam a mediana do grupo.
+ *
+ * O nome sozinho não basta — "SC1 Cooling Roll Tension Unit", "SC3 S-Roll Hot
+ * Oil Pump" e "RS7 - Bomba Óleo Térmico Rolo Gravado" trazem "Roll"/"Rolo" mas
+ * são outra coisa. Daí a lista de exclusão.
+ */
+const ROLL_ONLY = `a.name ~* '(roll|rolo|cilindro)'
+        AND a.name !~* '(pump|bomba|gearbox|redutor|motor|shaft|eixo|tension|acionamento|enroladora|exaustor)'`;
+
+export interface LineSummary {
+  line: string;
+  facilityId: number;
+  facilityName: string;
+  assets: number;
+  points: number;
+}
+
+export async function listLines(companyId: number): Promise<LineSummary[]> {
+  const { rows } = await pool.query(
+    `SELECT substring(a.name from $2) AS line,
+            f.id                      AS "facilityId",
+            f.name                    AS "facilityName",
+            count(DISTINCT a.id)::int AS assets,
+            count(p.id)::int          AS points
+       FROM "tbFacility" f
+       JOIN "tbAsset"    a ON a."facilityId" = f.id AND a."deletedAt" IS NULL
+       JOIN "tbPosition" p ON p."assetId"    = a.id AND p."deletedAt" IS NULL
+      WHERE f."companyId" = $1
+        AND f."deletedAt" IS NULL
+        AND p."sysSensorTypeId" = 1
+        AND p."activatorId" IS NOT NULL
+        AND p."lastAcquisitionDate" > now() - interval '2 days'
+        AND substring(a.name from $2) IS NOT NULL
+        AND ${ROLL_ONLY}
+      GROUP BY 1, 2, 3
+      ORDER BY 3, 1`,
+    [companyId, LINE_PREFIX],
+  );
+  return rows.map((r) => ({ ...r, facilityName: r.facilityName?.trim() }));
+}
+
+/** De que lado da máquina o ponto está, deduzido do nome. */
+export type PointSide = 'DRIVE' | 'OPPOSITE' | 'SINGLE';
+
+function sideOf(name: string): PointSide {
+  const n = name.toLowerCase();
+  // Limites de palavra sao obrigatorios: sem eles "os" casa dentro de "Nose".
+  // Duas convencoes convivem na planta: DS/ODS nas unidades dos EUA e
+  // LA/LOA nas do Brasil. O lado oposto vem primeiro: "ODS" contem "DS",
+  // e "LOA" contem "LA".
+  if (/\bop\s*side\b|\bods\b|\bos\b|\bopposite\b|\bloa\b/.test(n)) return 'OPPOSITE';
+  if (/\bdrive\s*side\b|\bds\b|\bla\b/.test(n)) return 'DRIVE';
+  return 'SINGLE';
+}
+
+export interface LinePoint {
+  positionId: number;
+  positionName: string;
+  assetId: number;
+  assetName: string;
+  side: PointSide;
+  /** temperatura já corrigida, em °C */
+  temp: number | null;
+  at: string | null;
+}
+
+/**
+ * Todos os pontos de uma linha com a última temperatura conhecida.
+ *
+ * Usa `tbPositionLastValue` em vez do histórico no DynamoDB: aqui interessa o
+ * retrato do momento de dezenas de pontos, e uma consulta só resolve.
+ */
+export async function getLinePoints(
+  companyId: number,
+  facilityId: number,
+  line: string,
+): Promise<LinePoint[]> {
+  const { rows } = await pool.query(
+    `SELECT p.id    AS "positionId",
+            p.name  AS "positionName",
+            a.id    AS "assetId",
+            a.name  AS "assetName",
+            lv.value AS temp,
+            lv.date  AS at
+       FROM "tbFacility" f
+       JOIN "tbAsset"    a ON a."facilityId" = f.id AND a."deletedAt" IS NULL
+       JOIN "tbPosition" p ON p."assetId"    = a.id AND p."deletedAt" IS NULL
+       LEFT JOIN "tbPositionLastValue" lv
+              ON lv."positionId" = p.id AND lv.chart = 'T'
+      WHERE f."companyId" = $1
+        AND f.id = $2
+        AND f."deletedAt" IS NULL
+        AND p."sysSensorTypeId" = 1
+        AND p."activatorId" IS NOT NULL
+        AND p."lastAcquisitionDate" > now() - interval '2 days'
+        AND a.name ~ ('^' || $3 || '[^0-9]')
+        AND ${ROLL_ONLY}
+      ORDER BY a.name, p.name`,
+    [companyId, facilityId, line],
+  );
+
+  return rows.map((r) => ({
+    positionId: r.positionId,
+    positionName: r.positionName,
+    assetId: r.assetId,
+    assetName: r.assetName,
+    side: sideOf(r.positionName),
+    // A mesma correção aplicada às séries, para os números baterem entre telas.
+    temp: r.temp != null ? Number(r.temp) - config.temperatureOffsetC : null,
+    at: r.at?.toISOString() ?? null,
+  }));
+}
+
 export async function closePool() {
   await pool.end();
 }

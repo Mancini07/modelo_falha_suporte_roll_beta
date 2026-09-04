@@ -293,3 +293,83 @@ tbody tr.is-alarm td.delta { color: var(--critical); font-weight: 660; }
   .tl-row { flex-direction: column; gap: 2px; }
   .tl-when { flex: none; }
 }
+
+/* --- visão por linha ------------------------------------------------------ */
+/* As abas moram dentro da unidade: linhas de plantas diferentes nunca se
+   comparam, então a hierarquia visual precisa dizer isso antes do clique. */
+.line-nav { display: flex; flex-direction: column; gap: 12px; }
+.line-facility h2 {
+  margin: 0 0 6px; font-size: 11px; font-weight: 620; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.line-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.line-tab {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 14px; border-radius: 9px; font-size: 13px; font-weight: 580;
+  background: var(--surface-1); border: 1px solid var(--border); color: var(--text-secondary);
+}
+.line-tab em {
+  font-style: normal; font-size: 11px; font-variant-numeric: tabular-nums;
+  color: var(--text-muted); background: var(--surface-2);
+  padding: 1px 6px; border-radius: 999px;
+}
+.line-tab:hover:not(.is-active) { background: var(--surface-2); color: var(--text-primary); }
+.line-tab.is-active {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+}
+.line-tab.is-active em { background: rgba(255,255,255,.18); color: #fff; }
+
+.line-groups { display: flex; flex-direction: column; gap: 16px; }
+
+/* Leitura parada há mais de um dia: fica visível para o ponto não sumir da
+   lista, mas apagada, sem barra e sem entrar na mediana. */
+.line-row.is-stale { opacity: .45; }
+.line-row.is-stale .line-bar-fill { background: var(--text-muted); }
+
+.line-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+
+.line-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 2fr) minmax(80px, 3fr) 64px 52px 92px;
+  align-items: center; gap: 12px;
+  padding: 6px 10px; border-radius: 8px;
+  font-size: 12.5px; color: var(--text-secondary);
+}
+.line-row:nth-child(odd) { background: var(--surface-2); }
+/* Ponto acima da mediana do grupo: é o que o olho precisa achar primeiro. */
+.line-row.is-hot {
+  background: color-mix(in srgb, var(--warning) 13%, var(--surface-1));
+  box-shadow: inset 2px 0 0 var(--warning);
+}
+
+.line-name { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.line-name b {
+  color: var(--text-primary); font-weight: 600; font-size: 12.5px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.line-name em {
+  font-style: normal; color: var(--text-muted); font-size: 11px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.line-pinned { font-style: normal; color: var(--accent-edge); font-size: 9px; }
+
+.line-bar { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.line-row:nth-child(odd) .line-bar { background: var(--surface-1); }
+.line-bar-fill { display: block; height: 100%; border-radius: 999px; background: var(--series-a); }
+.line-row.is-hot .line-bar-fill { background: var(--warning); }
+
+.line-temp {
+  text-align: right; font-variant-numeric: tabular-nums;
+  font-weight: 640; color: var(--text-primary);
+}
+.line-delta {
+  text-align: right; font-variant-numeric: tabular-nums; font-size: 11.5px;
+  color: var(--text-muted);
+}
+.line-row.is-hot .line-delta { color: var(--warning); font-weight: 620; }
+.line-when { text-align: right; font-size: 11px; color: var(--text-muted); }
+
+@media (max-width: 760px) {
+  .line-row { grid-template-columns: 1fr 64px 52px; }
+  .line-bar, .line-when { display: none; }
+}

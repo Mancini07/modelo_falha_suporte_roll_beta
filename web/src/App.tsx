@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  fetchBoard, fetchTree, pinPair, setPairThreshold, learnBaseline, unpinPair,
+  fetchBoard, fetchTree, pinPair, setPairThreshold, setPairSettings, learnBaseline, unpinPair,
 } from './api';
 import type { BoardResult, TreeAsset, TreeFacility } from './types';
 import BoardView from './views/BoardView';
 import AnalyticsView from './views/AnalyticsView';
+import LineView from './views/LineView';
 
 const COMPANY_ID = 5;
 const REFRESH_MS = 60_000;
 
-type Screen = 'board' | 'analytics';
+type Screen = 'board' | 'analytics' | 'lines';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('board');
@@ -103,6 +104,15 @@ export default function App() {
     }
   }
 
+  async function handleDeviationMode(id: string, mode: 'ABSOLUTE' | 'RELATIVE') {
+    try {
+      await setPairSettings(id, { deviationMode: mode });
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   async function handleRemove(id: string) {
     try {
       await unpinPair(id);
@@ -126,12 +136,16 @@ export default function App() {
           onPin={handlePin}
           onUpdateThreshold={handleUpdateThreshold}
           onLearnBaseline={handleLearnBaseline}
+          onDeviationMode={handleDeviationMode}
+          onOpenLines={() => setScreen('lines')}
           onRemove={handleRemove}
           onAnalyse={(pairId) => {
             setAnalysePairId(pairId);
             setScreen('analytics');
           }}
         />
+      ) : screen === 'lines' ? (
+        <LineView companyId={COMPANY_ID} onBack={() => setScreen('board')} />
       ) : (
         <AnalyticsView
           pinned={board?.pairs ?? []}

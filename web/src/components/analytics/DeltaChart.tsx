@@ -24,12 +24,19 @@ export default function DeltaChart({ data }: Props) {
   const geom = useMemo(() => {
     if (pairs.length === 0) return null;
     const th = settings.thresholdC;
+    // A faixa acompanha a referência do alarme: num ativo com assimetria
+    // permanente ela fica em torno do normal dele, não do zero. Desenhar a
+    // faixa em outro lugar faria o gráfico contradizer a regra.
+    const ref = settings.deviationReference;
     const deltas = pairs.map((p) => p.delta);
     const times = pairs.map((p) => p.t);
 
     const xDomain: [number, number] = [Math.min(...times), Math.max(...times)];
     // The tolerated band always stays on scale, otherwise the limit falls off view.
-    const yDomain = niceDomain([...deltas, th * 1.25, -th * 1.25], 0.06);
+    const yDomain = niceDomain(
+      [...deltas, ref + th * 1.25, ref - th * 1.25, 0],
+      0.06,
+    );
 
     const x = linear(xDomain, [M.left, M.left + PLOT_W]);
     const y = linear(yDomain, [M.top + PLOT_H, M.top]);
@@ -38,11 +45,13 @@ export default function DeltaChart({ data }: Props) {
       x, y, xDomain, yDomain,
       path: linePath(pairs.map((p) => ({ x: x(p.t), y: y(p.delta), t: p.t })), 90 * 60_000),
     };
-  }, [pairs, settings.thresholdC]);
+  }, [pairs, settings.thresholdC, settings.deviationReference]);
 
   if (!geom) return <p className="muted">No comparable pairs to compute the deviation.</p>;
   const { x, y, xDomain, yDomain } = geom;
   const th = settings.thresholdC;
+  const ref = settings.deviationReference;
+  const relative = settings.deviationMode === 'RELATIVE';
 
   function onMove(e: React.MouseEvent<SVGRectElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -54,8 +63,8 @@ export default function DeltaChart({ data }: Props) {
   }
 
   const tooltipLeft = hover ? Math.min(Math.max((hover.x / W) * 100, 4), 74) : 0;
-  const bandTop = y(th);
-  const bandBottom = y(-th);
+  const bandTop = y(ref + th);
+  const bandBottom = y(ref - th);
 
   return (
     <div className="chart-wrap">
@@ -63,20 +72,37 @@ export default function DeltaChart({ data }: Props) {
         className="chart"
         viewBox={`0 0 ${W} ${H}`}
         role="img"
-        aria-label={`Temperature deviation between the two points against the tolerated band of plus or minus ${th} degrees.`}
+        aria-label={
+          relative
+            ? `Temperature deviation against the asset normal of ${ref} degrees, tolerating ${th} degrees either way.`
+            : `Temperature deviation between the two points against the tolerated band of plus or minus ${th} degrees.`
+        }
       >
         <rect x={M.left} y={bandTop} width={PLOT_W} height={bandBottom - bandTop} fill="var(--surface-2)" />
         <line className="threshold-line" x1={M.left} x2={M.left + PLOT_W} y1={bandTop} y2={bandTop} />
         <line className="threshold-line" x1={M.left} x2={M.left + PLOT_W} y1={bandBottom} y2={bandBottom} />
         <text className="axis-text" x={M.left + PLOT_W + 12} y={bandTop} dominantBaseline="middle" fill="var(--critical)" fontWeight={620}>
-          +{th}°C
+          {(ref + th).toFixed(1)}°C
         </text>
         <text className="axis-text" x={M.left + PLOT_W + 12} y={bandBottom} dominantBaseline="middle" fill="var(--critical)" fontWeight={620}>
-          −{th}°C
+          {(ref - th).toFixed(1)}°C
         </text>
         <text className="axis-text" x={M.left + PLOT_W + 12} y={(bandTop + bandBottom) / 2} dominantBaseline="middle">
           tolerated band
         </text>
+
+        {/* Linha do normal do ativo, quando o alarme é medido contra ele. */}
+        {relative && (
+          <>
+            <line
+              x1={M.left} x2={M.left + PLOT_W} y1={y(ref)} y2={y(ref)}
+              style={{ stroke: 'var(--text-muted)', strokeWidth: 1.5, strokeDasharray: '2 4' }}
+            />
+            <text className="axis-text" x={M.left + 8} y={y(ref) - 6} fontWeight={620}>
+              asset normal {ref.toFixed(1)} °C
+            </text>
+          </>
+        )}
 
         {ticks(yDomain, 4).map((v) => (
           <text key={v} className="axis-text" x={M.left - 9} y={y(v)} textAnchor="end" dominantBaseline="middle">

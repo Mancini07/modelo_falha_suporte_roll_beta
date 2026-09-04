@@ -481,8 +481,11 @@ export default function AnalyticsView({ pinned, thresholdC, toleranceMin, initia
           <p className="muted" style={{ fontSize: 12 }}>
             {data.diagnostics.samplesA} readings on point A and {data.diagnostics.samplesB} on
             point B · {data.pairs.length} valid comparisons ·{' '}
-            {data.diagnostics.discarded} discarded for time lag ·{' '}
-            {data.vibrationA.length} vibration samples per point.
+            {data.diagnostics.discarded} discarded for time lag
+            {data.diagnostics.stopped > 0 && (
+              <> · {data.diagnostics.stopped} dropped with the machine stopped</>
+            )}{' '}
+            · {data.vibrationA.length} vibration samples per point.
           </p>
         </>
       )}

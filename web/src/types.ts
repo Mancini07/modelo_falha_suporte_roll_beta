@@ -33,6 +33,10 @@ export interface PairState {
   thresholdIsCustom: boolean;
   /** desvio normal do ativo, com sinal; null quando ainda não foi aprendido */
   baselineC: number | null;
+  /** contra o que o desvio é medido neste ativo */
+  deviationMode: 'ABSOLUTE' | 'RELATIVE';
+  /** o valor de referência efetivamente usado, em °C */
+  deviationReference: number;
   /** o lado quente trocou em relação ao normal do ativo */
   inverted: boolean;
   /** quantas comparações romperam o limite na janela de risco */
@@ -195,6 +199,8 @@ export interface PairingDiagnostics {
   samplesB: number;
   paired: number;
   discarded: number;
+  /** comparações descartadas por terem ocorrido com a máquina parada */
+  stopped: number;
   minLagMs: number | null;
   medianLagMs: number | null;
   yieldByToleranceMin: Array<{ toleranceMin: number; pairs: number }>;
@@ -218,6 +224,9 @@ export interface AnalysisResult {
     mountedMinAccG: number;
     mountedIsCustom: boolean;
     offMachineMinTempGapC: number;
+    deviationMode: 'ABSOLUTE' | 'RELATIVE';
+    deviationReference: number;
+    baselineC: number | null;
   };
   summary: {
     latest: ComparedPair | null;
@@ -242,4 +251,35 @@ export interface AnalysisSettings {
   days: number;
   thresholdC: number;
   toleranceMin: number;
+}
+
+/* --- Lines screen -------------------------------------------------------- */
+
+export interface LineSummary {
+  line: string;
+  facilityId: number;
+  facilityName: string;
+  assets: number;
+  points: number;
+}
+
+export type PointSide = 'DRIVE' | 'OPPOSITE' | 'SINGLE';
+
+export interface LinePoint {
+  positionId: number;
+  positionName: string;
+  assetId: number;
+  assetName: string;
+  side: PointSide;
+  /** temperatura já corrigida, em °C */
+  temp: number | null;
+  at: string | null;
+  /** o ativo está cravado no painel */
+  pinned: boolean;
+}
+
+export interface LineDetail {
+  line: string;
+  facilityId: number;
+  points: LinePoint[];
 }

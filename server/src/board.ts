@@ -3,7 +3,7 @@ import { getTemperatureSeries, getVibrationSeries } from './dynamo.js';
 import { getPositions, getOpenOccurrences } from './postgres.js';
 import { pairSeries } from './pairing.js';
 import type { PinnedPair } from './pairsStore.js';
-import type { BoardResult, PairState, VibrationSample } from './types.js';
+import type { BoardResult, ComparedPair, PairState, VibrationSample } from './types.js';
 
 /**
  * Janela de risco. Um rompimento do limite mantém o ativo em risco por este
@@ -79,6 +79,59 @@ export function offMachine(args: {
   return tempOther - tempSelf >= minTempGapC;
 }
 
+/** Maior aceleração entre os três eixos de uma amostra. */
+function maxAcc(s: VibrationSample | null): number | null {
+  if (!s) return null;
+  const axes = [s.accX, s.accY, s.accZ].filter((v): v is number => v != null);
+  return axes.length ? Math.max(...axes) : null;
+}
+
+/** Amostra de vibração mais próxima de um instante, dentro da tolerância. */
+function nearestVibration(
+  series: VibrationSample[],
+  t: number,
+  tolMs: number,
+): VibrationSample | null {
+  let best: VibrationSample | null = null;
+  let bestDist = Infinity;
+  for (const s of series) {
+    const d = Math.abs(s.t - t);
+    if (d < bestDist) { bestDist = d; best = s; }
+  }
+  return bestDist <= tolMs ? best : null;
+}
+
+/**
+ * Descarta as comparações feitas com a máquina parada.
+ *
+ * Parada, os mancais esfriam em ritmos diferentes e o desvio entre os lados
+ * passa a refletir inércia térmica, não lubrificação. A vibração é horária, daí
+ * a tolerância de 90 min para casar com a leitura de temperatura.
+ *
+ * Sem vibração por perto a comparação é mantida: não dá para provar que estava
+ * parada, e descartar dado bom é pior que manter dado duvidoso.
+ */
+export function dropStopped(
+  pairs: ComparedPair[],
+  vibA: VibrationSample[],
+  vibB: VibrationSample[],
+  runningMinAccG: number,
+): { running: ComparedPair[]; stopped: number } {
+  const TOL = 90 * 60_000;
+  const running: ComparedPair[] = [];
+  let stopped = 0;
+
+  for (const p of pairs) {
+    const a = maxAcc(nearestVibration(vibA, p.t, TOL));
+    const b = maxAcc(nearestVibration(vibB, p.t, TOL));
+    if (a == null && b == null) { running.push(p); continue; }
+    // Basta um dos lados acusar movimento para a máquina estar rodando.
+    if (Math.max(a ?? 0, b ?? 0) < runningMinAccG) stopped++;
+    else running.push(p);
+  }
+  return { running, stopped };
+}
+
 export function isInverted(
   delta: number,
   baselineC: number | null,
@@ -145,6 +198,14 @@ export async function evaluateBoard(
       // Cada ativo tem sua assimetria normal entre mancais: um redutor grande
       // tolera mais desvio que um rolo leve. O limite do par manda; o global
       // é só o ponto de partida.
+      /**
+       * Ativo com assimetria permanente entre os lados só tem alarme útil se o
+       * desvio for medido contra esse normal, e não contra zero.
+       */
+      const deviationMode = pin.deviationMode ?? 'ABSOLUTE';
+      const deviationReference =
+        deviationMode === 'RELATIVE' ? (pin.baselineC ?? 0) : 0;
+
       const thresholdIsCustom = pin.thresholdC != null;
       const thresholdC = pin.thresholdC ?? defaultThresholdC;
       const baselineC = pin.baselineC ?? null;
@@ -161,6 +222,8 @@ export async function evaluateBoard(
         thresholdC,
         thresholdIsCustom,
         baselineC,
+        deviationMode,
+        deviationReference,
         openOccurrences: occ?.openCount ?? 0,
         occurrenceStatus: occ?.worstStatus ?? null,
         occurrenceStatusId: occ?.worstStatusId ?? null,
@@ -175,7 +238,8 @@ export async function evaluateBoard(
           infoB?.activatorId ? getVibrationSeries(infoB.activatorId, since) : Promise.resolve([]),
         ]);
 
-        const { pairs } = pairSeries(a, b, toleranceMs, thresholdC);
+        const all = pairSeries(a, b, toleranceMs, thresholdC, deviationReference).pairs;
+        const { running: pairs } = dropStopped(all, vibA, vibB, config.runningMinAccG);
         const latest = pairs[pairs.length - 1];
 
         // Basta um rompimento na janela para o ativo seguir em risco.
@@ -283,6 +347,8 @@ export async function evaluateBoard(
           peakAccB: null,
           mountedMinAccG: pin.mountedMinAccG ?? config.mountedMinAccG,
           mountedIsCustom: pin.mountedMinAccG != null,
+          deviationMode,
+          deviationReference,
           delta: null,
           t: null,
           lagMs: null,

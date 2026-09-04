@@ -32,6 +32,19 @@ const dtFull = new Intl.DateTimeFormat('en-US', {
 });
 
 export const stamp = (t: number) => dt.format(new Date(t));
+
+/** Há quanto tempo — o que importa numa varredura rápida da linha. */
+export function ago(t: number): string {
+  const ms = Date.now() - t;
+  const m = Math.round(ms / 60_000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m} min ago`;
+  const h = ms / 3_600_000;
+  if (h < 48) return `${h.toFixed(1)} h ago`;
+  return `${(h / 24).toFixed(0)} days ago`;
+}
+
+export const stampAgo = (t: number) => ago(t);
 export const stampFull = (t: number) => dtFull.format(new Date(t));
 
 /** Strips the numbering prefix ("03.6 - Bearing DE" -> "Bearing DE"). */

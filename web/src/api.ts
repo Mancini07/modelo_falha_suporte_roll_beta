@@ -1,4 +1,6 @@
-import type { BoardResult, Company, OccurrenceHistory, TreeFacility } from './types';
+import type {
+  BoardResult, Company, LineDetail, LineSummary, OccurrenceHistory, TreeFacility,
+} from './types';
 
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -57,7 +59,11 @@ export function pinPair(pair: NewPair) {
  */
 export function setPairSettings(
   id: string,
-  patch: { thresholdC?: number | null; mountedMinAccG?: number | null },
+  patch: {
+    thresholdC?: number | null;
+    mountedMinAccG?: number | null;
+    deviationMode?: 'ABSOLUTE' | 'RELATIVE' | null;
+  },
 ) {
   return json(`/api/pairs/${encodeURIComponent(id)}`, {
     method: 'PATCH',
@@ -106,4 +112,25 @@ export function fetchAnalysis(
     toleranceMin: String(s.toleranceMin),
   });
   return json(`/api/analysis?${qs}`, { signal });
+}
+
+/** Linhas de produção da empresa, por unidade. */
+export function fetchLines(companyId: number, signal?: AbortSignal) {
+  return json<LineSummary[]>(`/api/lines?companyId=${companyId}`, { signal });
+}
+
+/**
+ * Os rolos de uma linha, com a temperatura atual. A unidade entra na chamada
+ * porque o prefixo ("SC1") só é único dentro de uma planta.
+ */
+export function fetchLine(
+  companyId: number,
+  facilityId: number,
+  line: string,
+  signal?: AbortSignal,
+) {
+  return json<LineDetail>(
+    `/api/line?companyId=${companyId}&facilityId=${facilityId}&line=${encodeURIComponent(line)}`,
+    { signal },
+  );
 }

@@ -50,7 +50,18 @@ export const config = {
    * o mancal do outro lado. Sem essa segunda evidência, a suspeita não é
    * declarada e o ativo segue sendo avaliado por lubrificação.
    */
-  offMachineMinTempGapC: Number(process.env.OFF_MACHINE_MIN_TEMP_GAP_C ?? 10),
+  offMachineMinTempGapC: Number(process.env.OFF_MACHINE_MIN_TEMP_GAP_C ?? 25),
+
+  /**
+   * Aceleração RMS mínima, em g, para considerar a máquina EM OPERAÇÃO.
+   *
+   * Separado de `mountedMinAccG` de propósito: aquele foi afrouxado em vários
+   * ativos para não acusar sensor solto, e reaproveitá-lo aqui tornaria a
+   * detecção de parada cega. Com máquina parada os mancais esfriam e a relação
+   * entre os lados muda por motivo que não é lubrificação, então essas
+   * comparações são descartadas.
+   */
+  runningMinAccG: Number(process.env.RUNNING_MIN_ACC_G ?? 0.03),
 
   /** padrões do domínio, sobrescrevíveis por query string */
   defaults: {

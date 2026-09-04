@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { PairState } from '../types';
 import { c1, signed1, stamp, stampFull, shortName } from '../format.en';
 
@@ -9,6 +10,8 @@ interface Props {
   mountedMinAccG: number;
   onRemove: (id: string) => void;
   onAnalyse: (id: string) => void;
+  /** Ajuste do limite direto no card, sem abrir o dialogo. */
+  onQuickLimit: (id: string, thresholdC: number) => void;
 }
 
 const W = 440;
@@ -20,7 +23,24 @@ const H = 200;
  * sensor pulse red. The geometry is the same for every asset — what changes is
  * which side heats up.
  */
-export default function AssetTwin({ pair, riskHoldHours, mountedMinAccG, onRemove, onAnalyse }: Props) {
+export default function AssetTwin({
+  pair, riskHoldHours, mountedMinAccG, onRemove, onAnalyse, onQuickLimit,
+}: Props) {
+  /**
+   * Rascunho do limite. Fica local enquanto se digita e só sobe ao confirmar,
+   * senão cada tecla dispararia uma gravação e uma recarga do painel.
+   */
+  const [draft, setDraft] = useState(String(pair.thresholdC));
+  useEffect(() => setDraft(String(pair.thresholdC)), [pair.thresholdC]);
+
+  const parsed = Number(draft);
+  const draftValid = Number.isFinite(parsed) && parsed > 0;
+  const draftChanged = draftValid && parsed !== pair.thresholdC;
+
+  function commit() {
+    if (draftChanged) onQuickLimit(pair.id, parsed);
+    else setDraft(String(pair.thresholdC));
+  }
   // Cada ativo traz o seu limite; o global é só o padrão de quem não definiu.
   const thresholdC = pair.thresholdC;
   const alarm = pair.status === 'ALARME';
@@ -232,7 +252,11 @@ export default function AssetTwin({ pair, riskHoldHours, mountedMinAccG, onRemov
             </text>
             <text x={220} y={132} textAnchor="middle" className="twin-delta-sub">
               limit {thresholdC} °C
-              {pair.baselineC != null ? ` · normal ${signed1(pair.baselineC)}` : ''}
+              {pair.deviationMode === 'RELATIVE'
+                ? ` · vs normal ${signed1(pair.deviationReference)}`
+                : pair.baselineC != null
+                  ? ` · normal ${signed1(pair.baselineC)}`
+                  : ''}
             </text>
           </>
         )}
@@ -253,6 +277,29 @@ export default function AssetTwin({ pair, riskHoldHours, mountedMinAccG, onRemov
           <i className="dot" style={{ background: alarmB ? 'var(--critical)' : 'var(--series-b)' }} />
         </span>
       </footer>
+
+      <div className="twin-quick">
+        <label htmlFor={`lim-${pair.id}`}>Limit</label>
+        <input
+          id={`lim-${pair.id}`}
+          type="number"
+          step="0.5"
+          min="0.5"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+            if (e.key === 'Escape') setDraft(String(pair.thresholdC));
+          }}
+        />
+        <span className="unit">°C</span>
+        {draftChanged && <span className="twin-quick-hint">press Enter to save</span>}
+        {!draftValid && <span className="twin-quick-warn">must be &gt; 0</span>}
+        {pair.thresholdIsCustom && !draftChanged && (
+          <span className="twin-quick-tag">asset</span>
+        )}
+      </div>
 
       <p className={`twin-occ${hasOccurrence ? ' is-open' : ''}`}>
         {hasOccurrence ? (

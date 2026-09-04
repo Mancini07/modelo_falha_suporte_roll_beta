@@ -72,6 +72,8 @@ export interface PairingDiagnostics {
   paired: number;
   /** quantas amostras de A foram descartadas por defasagem */
   discarded: number;
+  /** comparações descartadas por terem ocorrido com a máquina parada */
+  stopped: number;
   /** menor defasagem observada entre as duas séries, em ms */
   minLagMs: number | null;
   /** defasagem mediana entre pares mais próximos, em ms */
@@ -120,6 +122,10 @@ export interface PairState {
   thresholdIsCustom: boolean;
   /** desvio normal do ativo, com sinal; null quando ainda não foi aprendido */
   baselineC: number | null;
+  /** contra o que o desvio é medido neste ativo */
+  deviationMode: 'ABSOLUTE' | 'RELATIVE';
+  /** o valor de referência efetivamente usado, em °C */
+  deviationReference: number;
   /** quantas comparações romperam o limite na janela de risco */
   breachCount: number;
   /** instante do rompimento mais recente na janela */
@@ -187,6 +193,10 @@ export interface AnalysisResult {
     mountedIsCustom: boolean;
     /** quanto o sensor solto precisa estar mais frio que o par, em °C */
     offMachineMinTempGapC: number;
+    /** contra o que o desvio é medido neste par */
+    deviationMode: 'ABSOLUTE' | 'RELATIVE';
+    deviationReference: number;
+    baselineC: number | null;
   };
   summary: {
     /** par válido mais recente — o que define o estado atual do painel */

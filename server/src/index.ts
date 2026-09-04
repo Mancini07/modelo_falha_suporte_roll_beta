@@ -7,12 +7,15 @@ import {
   getCompanyTree,
   listCompanies,
   getOccurrenceHistory,
+  listLines,
+  getLinePoints,
   closePool,
 } from './postgres.js';
+import type { LinePoint } from './postgres.js';
 import {
   listPairs, addPair, removePair, updatePairSettings, updatePairBaseline,
 } from './pairsStore.js';
-import { evaluateBoard, learnBaseline } from './board.js';
+import { evaluateBoard, learnBaseline, dropStopped } from './board.js';
 import { getTemperatureSeries, getVibrationSeries } from './dynamo.js';
 import { pairSeries, diagnose, summarize } from './pairing.js';
 import type { AnalysisResult, PositionInfo } from './types.js';
@@ -61,6 +64,8 @@ app.get('/api/analysis', async (req, res) => {
     );
     const thresholdC = match?.thresholdC ?? config.defaults.thresholdC;
     const mountedMinAccG = match?.mountedMinAccG ?? config.mountedMinAccG;
+    const deviationMode = match?.deviationMode ?? 'ABSOLUTE';
+    const deviationReference = deviationMode === 'RELATIVE' ? (match?.baselineC ?? 0) : 0;
 
     const since = Date.now() - days * 86_400_000;
 
@@ -79,7 +84,14 @@ app.get('/api/analysis', async (req, res) => {
       infoB?.activatorId ? getVibrationSeries(infoB.activatorId, since) : [],
     ]);
 
-    const { pairs, discarded } = pairSeries(seriesA, seriesB, toleranceMs, thresholdC);
+    const paired = pairSeries(
+      seriesA, seriesB, toleranceMs, thresholdC, deviationReference,
+    );
+    const discarded = paired.discarded;
+    // Máquina parada esfria os mancais: a comparação não fala de lubrificação.
+    const { running: pairs, stopped } = dropStopped(
+      paired.pairs, vibrationA, vibrationB, config.runningMinAccG,
+    );
 
     const result: AnalysisResult = {
       pointA: infoA ?? placeholder(a),
@@ -90,7 +102,7 @@ app.get('/api/analysis', async (req, res) => {
       vibrationB,
       pairs,
       discarded,
-      diagnostics: diagnose(seriesA, seriesB, pairs, discarded),
+      diagnostics: diagnose(seriesA, seriesB, pairs, discarded, stopped),
       settings: {
         thresholdC,
         toleranceMs,
@@ -99,6 +111,9 @@ app.get('/api/analysis', async (req, res) => {
         mountedMinAccG,
         mountedIsCustom: match?.mountedMinAccG != null,
         offMachineMinTempGapC: config.offMachineMinTempGapC,
+        deviationMode,
+        deviationReference,
+        baselineC: match?.baselineC ?? null,
       },
       summary: summarize(pairs, thresholdC),
     };
@@ -184,7 +199,11 @@ app.post('/api/pairs', async (req, res) => {
  */
 app.patch('/api/pairs/:id', async (req, res) => {
   try {
-    const patch: { thresholdC?: number | null; mountedMinAccG?: number | null } = {};
+    const patch: {
+      thresholdC?: number | null;
+      mountedMinAccG?: number | null;
+      deviationMode?: 'ABSOLUTE' | 'RELATIVE' | null;
+    } = {};
 
     const parse = (raw: unknown, campo: string): number | null => {
       if (raw == null || raw === '') return null;
@@ -200,6 +219,13 @@ app.patch('/api/pairs/:id', async (req, res) => {
     }
     if ('mountedMinAccG' in (req.body ?? {})) {
       patch.mountedMinAccG = parse(req.body.mountedMinAccG, 'mountedMinAccG');
+    }
+    if ('deviationMode' in (req.body ?? {})) {
+      const mode = req.body.deviationMode;
+      if (mode != null && mode !== 'ABSOLUTE' && mode !== 'RELATIVE') {
+        throw new Error('deviationMode precisa ser ABSOLUTE ou RELATIVE');
+      }
+      patch.deviationMode = mode ?? null;
     }
 
     const pair = await updatePairSettings(req.params.id, patch);
@@ -295,6 +321,47 @@ app.get('/api/occurrences', async (req, res) => {
     res.json(await getOccurrenceHistory(assetId, Math.min(num(req.query.limit, 5), 50)));
   } catch (err) {
     console.error('[/api/occurrences]', err);
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/** Linhas de produção da empresa (SC1, SC2, RS7…). */
+app.get('/api/lines', async (req, res) => {
+  try {
+    res.json(await listLines(num(req.query.companyId, 5)));
+  } catch (err) {
+    console.error('[/api/lines]', err);
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/**
+ * Os rolos de uma linha, dentro de uma unidade, com a temperatura atual —
+ * para comparar o mesmo lado entre rolos diferentes.
+ *
+ * A unidade é obrigatória: o prefixo da linha vive no nome do ativo e nada
+ * impede duas plantas de usarem "SC1" para linhas diferentes.
+ */
+app.get('/api/line', async (req, res) => {
+  try {
+    const line = String(req.query.line ?? '').trim();
+    if (!/^[A-Z]{2}[0-9]+$/.test(line)) {
+      return res.status(400).json({ error: 'line inválida' });
+    }
+    const facilityId = num(req.query.facilityId, 0);
+    if (!facilityId) return res.status(400).json({ error: 'facilityId obrigatório' });
+
+    const points = await getLinePoints(num(req.query.companyId, 5), facilityId, line);
+    const pinned = await listPairs();
+    const pinnedAssets = new Set(pinned.map((p) => p.assetId));
+
+    res.json({
+      line,
+      facilityId,
+      points: points.map((p: LinePoint) => ({ ...p, pinned: pinnedAssets.has(p.assetId) })),
+    });
+  } catch (err) {
+    console.error('[/api/line]', err);
     res.status(500).json({ error: (err as Error).message });
   }
 });

@@ -33,6 +33,14 @@ export interface PinnedPair {
    * um redutor solto. Ausente = padrão global.
    */
   mountedMinAccG?: number;
+  /**
+   * Contra o que o desvio é medido.
+   * 'ABSOLUTE' — contra zero, ou seja, os dois lados deveriam estar iguais.
+   * 'RELATIVE' — contra o normal do ativo, para máquinas com assimetria
+   * permanente, onde a regra absoluta alarma o tempo inteiro.
+   * Ausente = ABSOLUTE.
+   */
+  deviationMode?: 'ABSOLUTE' | 'RELATIVE';
   /** Janela de onde o baseline foi aprendido, para rastreabilidade. */
   baselineFrom?: string;
   baselineTo?: string;
@@ -86,7 +94,11 @@ export async function addPair(
  */
 export async function updatePairSettings(
   id: string,
-  patch: { thresholdC?: number | null; mountedMinAccG?: number | null },
+  patch: {
+    thresholdC?: number | null;
+    mountedMinAccG?: number | null;
+    deviationMode?: 'ABSOLUTE' | 'RELATIVE' | null;
+  },
 ): Promise<PinnedPair | null> {
   const pairs = await readAll();
   const pair = pairs.find((p) => p.id === id);
@@ -99,6 +111,10 @@ export async function updatePairSettings(
   if ('mountedMinAccG' in patch) {
     if (patch.mountedMinAccG == null) delete pair.mountedMinAccG;
     else pair.mountedMinAccG = patch.mountedMinAccG;
+  }
+  if ('deviationMode' in patch) {
+    if (patch.deviationMode == null) delete pair.deviationMode;
+    else pair.deviationMode = patch.deviationMode;
   }
 
   await writeAll(pairs);
