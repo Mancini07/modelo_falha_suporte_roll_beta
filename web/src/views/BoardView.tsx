@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type KeyboardEvent } from 'react';
 import type { BoardResult, PairAverages, TreeAsset, TreeFacility } from '../types';
 import AssetTwin from '../components/AssetTwin';
 import PairPicker from '../components/PairPicker';
@@ -31,6 +31,18 @@ export default function BoardView({
 }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pinning, setPinning] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'ALARME' | 'ALERTA' | null>(null);
+  const toggleFilter = (s: 'ALARME' | 'ALERTA') =>
+    setStatusFilter((cur) => (cur === s ? null : s));
+  const filterProps = (s: 'ALARME' | 'ALERTA') => ({
+    role: 'button' as const,
+    tabIndex: 0,
+    'aria-pressed': statusFilter === s,
+    onClick: () => toggleFilter(s),
+    onKeyDown: (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFilter(s); }
+    },
+  });
 
   const pairs = board?.pairs ?? [];
 
@@ -48,6 +60,7 @@ export default function BoardView({
   const byUnit = useMemo(() => {
     const m = new Map<string, typeof pairs>();
     for (const p of pairs) {
+      if (statusFilter && p.status !== statusFilter) continue;
       const k = p.facilityName ?? 'No unit';
       m.set(k, [...(m.get(k) ?? []), p]);
     }
@@ -59,7 +72,7 @@ export default function BoardView({
         alarm: ps.filter((p) => p.status === 'ALARME').length,
         alert: ps.filter((p) => p.status === 'ALERTA').length,
       }));
-  }, [pairs]);
+  }, [pairs, statusFilter]);
 
   const company = pairs[0]?.companyName ?? 'Fitesa';
 
@@ -92,13 +105,21 @@ export default function BoardView({
       </header>
 
       <section className="summary" aria-label="Board summary">
-        <div className={`sum sum-alarm${counts.alarm > 0 ? ' is-on' : ''}`}>
+        <div
+          className={`sum sum-alarm is-clickable${counts.alarm > 0 ? ' is-on' : ''}${statusFilter === 'ALARME' ? ' is-selected' : ''}`}
+          title="Click to show only assets at risk"
+          {...filterProps('ALARME')}
+        >
           <span className="sum-n">{counts.alarm}</span>
           <span className="sum-k">
             ⚠ at risk{board ? ` · ${board.settings.riskHoldHours} h` : ''}
           </span>
         </div>
-        <div className={`sum sum-alert${counts.alert > 0 ? ' is-on' : ''}`}>
+        <div
+          className={`sum sum-alert is-clickable${counts.alert > 0 ? ' is-on' : ''}${statusFilter === 'ALERTA' ? ' is-selected' : ''}`}
+          title="Click to show only assets in alert"
+          {...filterProps('ALERTA')}
+        >
           <span className="sum-n">{counts.alert}</span>
           <span className="sum-k">▲ alert · deviation ≥ 5 °C</span>
         </div>
@@ -130,6 +151,14 @@ export default function BoardView({
             + Pin the first asset
           </button>
         </div>
+      )}
+
+      {statusFilter && (
+        <p className="muted filter-note">
+          Showing only {statusFilter === 'ALARME' ? 'assets at risk' : 'assets in alert'}
+          {byUnit.length === 0 && ' — none right now'}.{' '}
+          <button onClick={() => setStatusFilter(null)}>Clear filter</button>
+        </p>
       )}
 
       {byUnit.map((u) => (

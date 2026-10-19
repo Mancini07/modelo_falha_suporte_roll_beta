@@ -531,3 +531,8 @@ body {
 .twin-details { display: flex; flex-direction: column; }
 .twin-details .twin-quick:first-child, .twin-details .twin-occ:first-child { border-top: 0; margin-top: 2px; }
 .twin-svg { max-height: 170px; }
+
+.sum.is-clickable { cursor: pointer; }
+.sum.is-clickable:hover { filter: brightness(.97); }
+.sum.is-selected { outline: 2px solid var(--text-secondary); outline-offset: 2px; }
+.filter-note { margin: 0; }
