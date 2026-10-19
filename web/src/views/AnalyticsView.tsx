@@ -81,7 +81,7 @@ export default function AnalyticsView({ pinned, thresholdC, toleranceMin, initia
     }
     const ctrl = new AbortController();
     setLoadingOcc(true);
-    fetchOccurrences(assetId, ctrl.signal)
+    fetchOccurrences(assetId, ctrl.signal, 50)
       .then((r) => {
         setOccurrences(r.occurrences);
         setOccurrenceTotal(r.total);
@@ -95,6 +95,19 @@ export default function AnalyticsView({ pinned, thresholdC, toleranceMin, initia
       .finally(() => setLoadingOcc(false));
     return () => ctrl.abort();
   }, [assetId]);
+
+  /** Fechamentos como inválidos: o aviso foi descartado para não reabrir. */
+  const invalidClosures = occurrences
+    .filter((o) => o.closedAt != null && o.validAnalysis === false)
+    .map((o) => ({
+      id: o.id,
+      t: new Date(o.closedAt as string).getTime(),
+      closedBy: o.closedBy,
+      comment: o.closingComment,
+    }));
+  /** A linha do tempo mostra só as mais recentes; o gráfico usa todas. */
+  const TIMELINE_SIZE = 5;
+  const timeline = occurrences.slice(0, TIMELINE_SIZE);
 
   const openCount = occurrences.filter((o) => o.closedAt == null).length;
 
@@ -311,8 +324,14 @@ export default function AnalyticsView({ pinned, thresholdC, toleranceMin, initia
                 <i className="legend-swatch" style={{ background: 'var(--critical)' }} />
                 deviation above the limit
               </span>
+              {invalidClosures.length > 0 && (
+                <span className="legend-item">
+                  <i className="legend-swatch" style={{ background: 'var(--axis-h)' }} />
+                  closed as invalid
+                </span>
+              )}
             </div>
-            <TempChart data={data} />
+            <TempChart data={data} closures={invalidClosures} />
           </section>
 
           <section className="card">
@@ -469,11 +488,11 @@ export default function AnalyticsView({ pinned, thresholdC, toleranceMin, initia
               Every occurrence on <strong>{data.pointA.assetName ?? 'this asset'}</strong> — when
               it was opened and by whom, the diagnostic, when it was closed and by whom, and
               whether the analysis was judged valid.{' '}
-              {occurrenceTotal > occurrences.length
-                ? `Showing the ${occurrences.length} most recent of ${occurrenceTotal}.`
+              {occurrenceTotal > timeline.length
+                ? `Showing the ${timeline.length} most recent of ${occurrenceTotal}.`
                 : 'Most recent first.'}
             </p>
-            <OccurrenceTimeline occurrences={occurrences} loading={loadingOcc} />
+            <OccurrenceTimeline occurrences={timeline} loading={loadingOcc} />
           </section>
 
           <PairTable data={data} />

@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import type { BoardResult, TreeAsset, TreeFacility } from '../types';
+import type { BoardResult, PairAverages, TreeAsset, TreeFacility } from '../types';
 import AssetTwin from '../components/AssetTwin';
 import PairPicker from '../components/PairPicker';
 
 interface Props {
   board: BoardResult | null;
+  averages: Record<string, PairAverages>;
   tree: TreeFacility[];
   busy: boolean;
   error: string | null;
@@ -24,7 +25,7 @@ interface Props {
 }
 
 export default function BoardView({
-  board, tree, busy, error, thresholdC, toleranceMin,
+  board, averages, tree, busy, error, thresholdC, toleranceMin,
   onTolerance, onPin, onUpdateThreshold, onLearnBaseline, onDeviationMode,
   onRemove, onAnalyse, onOpenLines,
 }: Props) {
@@ -36,12 +37,29 @@ export default function BoardView({
   const counts = useMemo(
     () => ({
       alarm: pairs.filter((p) => p.status === 'ALARME').length,
+      alert: pairs.filter((p) => p.status === 'ALERTA').length,
       normal: pairs.filter((p) => p.status === 'NORMAL').length,
       sensorOff: pairs.filter((p) => p.status === 'SENSOR_FORA').length,
       idle: pairs.filter((p) => p.status === 'SEM_DADOS').length,
     }),
     [pairs],
   );
+
+  const byUnit = useMemo(() => {
+    const m = new Map<string, typeof pairs>();
+    for (const p of pairs) {
+      const k = p.facilityName ?? 'No unit';
+      m.set(k, [...(m.get(k) ?? []), p]);
+    }
+    return [...m.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, ps]) => ({
+        name,
+        pairs: ps,
+        alarm: ps.filter((p) => p.status === 'ALARME').length,
+        alert: ps.filter((p) => p.status === 'ALERTA').length,
+      }));
+  }, [pairs]);
 
   const company = pairs[0]?.companyName ?? 'Fitesa';
 
@@ -80,6 +98,10 @@ export default function BoardView({
             ⚠ at risk{board ? ` · ${board.settings.riskHoldHours} h` : ''}
           </span>
         </div>
+        <div className={`sum sum-alert${counts.alert > 0 ? ' is-on' : ''}`}>
+          <span className="sum-n">{counts.alert}</span>
+          <span className="sum-k">▲ alert · deviation ≥ 5 °C</span>
+        </div>
         <div className="sum sum-ok">
           <span className="sum-n">{counts.normal}</span>
           <span className="sum-k">✓ normal</span>
@@ -110,19 +132,32 @@ export default function BoardView({
         </div>
       )}
 
-      <div className="twin-grid">
-        {pairs.map((p) => (
-          <AssetTwin
-            key={p.id}
-            pair={p}
-            riskHoldHours={board?.settings.riskHoldHours ?? 24}
-            mountedMinAccG={board?.settings.mountedMinAccG ?? 0.03}
-            onRemove={onRemove}
-            onAnalyse={onAnalyse}
-            onQuickLimit={(id, v) => onUpdateThreshold(id, v)}
-          />
-        ))}
-      </div>
+      {byUnit.map((u) => (
+        <section key={u.name} className="unit-section" aria-label={u.name}>
+          <h2 className="unit-head">
+            {u.name}
+            <span className="unit-meta">
+              {u.pairs.length} asset{u.pairs.length === 1 ? '' : 's'}
+              {u.alarm > 0 && <span className="unit-alarm"> · ⚠ {u.alarm} at risk</span>}
+              {u.alert > 0 && <span className="unit-alert"> · ▲ {u.alert} alert</span>}
+            </span>
+          </h2>
+          <div className="twin-grid">
+            {u.pairs.map((p) => (
+              <AssetTwin
+                key={p.id}
+                pair={p}
+                averages={averages[p.id]}
+                riskHoldHours={board?.settings.riskHoldHours ?? 24}
+                mountedMinAccG={board?.settings.mountedMinAccG ?? 0.03}
+                onRemove={onRemove}
+                onAnalyse={onAnalyse}
+                onQuickLimit={(id, v) => onUpdateThreshold(id, v)}
+              />
+            ))}
+          </div>
+        </section>
+      ))}
 
       {pickerOpen && (
         <PairPicker

@@ -65,7 +65,9 @@ export const config = {
 
   /** padrões do domínio, sobrescrevíveis por query string */
   defaults: {
-    thresholdC: 3,
+    thresholdC: 5,
+    /** Desvio a partir do qual o ativo entra em ALERTA, abaixo do limite de alarme dele. */
+    alertC: 5,
     // Defasagem real entre sensores do mesmo ativo vai de ~6 a ~8 min,
     // conforme o slot que cada um ocupa no gateway.
     toleranceMin: 10,

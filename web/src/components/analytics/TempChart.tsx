@@ -9,8 +9,17 @@ const M = { top: 18, right: 128, bottom: 34, left: 52 };
 const PLOT_W = W - M.left - M.right;
 const PLOT_H = H - M.top - M.bottom;
 
+export interface Closure {
+  id: number;
+  t: number;
+  closedBy: string | null;
+  comment: string | null;
+}
+
 interface Props {
   data: AnalysisResult;
+  /** Ocorrências fechadas como inválidas, marcadas no tempo do fechamento. */
+  closures?: Closure[];
 }
 
 /**
@@ -18,7 +27,7 @@ interface Props {
  * pair breaks the limit, a pulsing red connector links the two readings — the
  * deviation becomes a visible distance rather than a hidden number.
  */
-export default function TempChart({ data }: Props) {
+export default function TempChart({ data, closures = [] }: Props) {
   const { seriesA, seriesB, pairs, settings, pointA, pointB } = data;
   const [hover, setHover] = useState<{ pair: ComparedPair; x: number } | null>(null);
 
@@ -48,6 +57,7 @@ export default function TempChart({ data }: Props) {
   const { x, y, xDomain, yDomain } = geom;
 
   const alarms = pairs.filter((p) => p.alarm);
+  const visibleClosures = closures.filter((c) => c.t >= xDomain[0] && c.t <= xDomain[1]);
   const lastA = seriesA[seriesA.length - 1];
   const lastB = seriesB[seriesB.length - 1];
 
@@ -102,6 +112,24 @@ export default function TempChart({ data }: Props) {
             y1={y(p.a)} y2={y(p.b)}
             stroke="var(--critical)" strokeWidth={2.5} strokeLinecap="round" opacity={0.85}
           />
+        ))}
+
+        {/* occurrences closed as invalid: the alert was dismissed so it is not reopened */}
+        {visibleClosures.map((c) => (
+          <g key={`closure-${c.id}`}>
+            <title>
+              {`Occurrence #${c.id} closed as invalid · ${stampFull(c.t)}${c.closedBy ? ` · ${c.closedBy}` : ''}${c.comment ? ` — ${c.comment}` : ''}`}
+            </title>
+            <line
+              x1={x(c.t)} x2={x(c.t)} y1={M.top} y2={M.top + PLOT_H}
+              stroke="var(--axis-h)" strokeWidth={1.8} strokeDasharray="5 4"
+            />
+            <path
+              d={`M${x(c.t)},${M.top} h14 l-4,6 l4,6 h-14 z`}
+              fill="var(--axis-h)"
+            />
+            <rect x={x(c.t) - 6} y={M.top} width={12} height={PLOT_H} fill="transparent" />
+          </g>
         ))}
 
         <path className="series-line" d={geom.pathA} stroke="var(--series-a)" />

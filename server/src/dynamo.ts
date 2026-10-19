@@ -109,3 +109,43 @@ export async function getVibrationSeries(
 
   return out.sort((a, b) => a.t - b.t);
 }
+
+const OCCURRENCE_HISTORY_TABLE = 'retina-asset-occurrence-history';
+
+/**
+ * Comentário escrito ao fechar cada ocorrência.
+ *
+ * Não fica em `tbAssetOccurrence.exclusionReason` (quase sempre vazio): o
+ * fechamento é um evento `CLOSE_OCCURRENCE` no histórico da ocorrência, com o
+ * texto em `comments`. Se a ocorrência foi reaberta e fechada de novo, vale o
+ * fechamento mais recente que tenha texto.
+ */
+export async function getClosingComments(
+  occurrenceIds: number[],
+): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  await Promise.all(
+    occurrenceIds.map(async (id) => {
+      try {
+        const res = await doc.send(
+          new QueryCommand({
+            TableName: OCCURRENCE_HISTORY_TABLE,
+            KeyConditionExpression: 'occurrenceId = :o',
+            FilterExpression: '#t = :close',
+            ExpressionAttributeNames: { '#t': 'type' },
+            ExpressionAttributeValues: { ':o': id, ':close': 'CLOSE_OCCURRENCE' },
+            ScanIndexForward: false,
+          }),
+        );
+        const hit = (res.Items ?? []).find(
+          (i) => typeof i.comments === 'string' && i.comments.trim() !== '',
+        );
+        if (hit) out.set(id, String(hit.comments).trim());
+      } catch (err) {
+        // Sem o histórico a linha do tempo ainda funciona; só perde o comentário.
+        console.error('[occurrence-history]', id, (err as Error).message);
+      }
+    }),
+  );
+  return out;
+}

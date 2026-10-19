@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  fetchBoard, fetchTree, pinPair, setPairThreshold, setPairSettings, learnBaseline, unpinPair,
+  fetchBoard, fetchAverages, fetchTree, pinPair, setPairThreshold, setPairSettings, learnBaseline, unpinPair,
 } from './api';
-import type { BoardResult, TreeAsset, TreeFacility } from './types';
+import type { BoardResult, PairAverages, TreeAsset, TreeFacility } from './types';
 import BoardView from './views/BoardView';
 import AnalyticsView from './views/AnalyticsView';
 import LineView from './views/LineView';
@@ -19,6 +19,7 @@ export default function App() {
   const [toleranceMin, setToleranceMin] = useState(10);
 
   const [board, setBoard] = useState<BoardResult | null>(null);
+  const [averages, setAverages] = useState<Record<string, PairAverages>>({});
   const [tree, setTree] = useState<TreeFacility[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
@@ -50,6 +51,17 @@ export default function App() {
     const id = setInterval(() => load(), REFRESH_MS);
     return () => clearInterval(id);
   }, [load, screen]);
+
+  // Médias de 7/15/30 dias mudam devagar: leitura própria, a cada 10 min.
+  const pairCount = board?.pairs.length ?? 0;
+  useEffect(() => {
+    const ctrl = new AbortController();
+    const run = () =>
+      fetchAverages(toleranceMin, ctrl.signal).then(setAverages).catch(() => undefined);
+    run();
+    const id = setInterval(run, 10 * 60_000);
+    return () => { ctrl.abort(); clearInterval(id); };
+  }, [toleranceMin, pairCount]);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -127,6 +139,7 @@ export default function App() {
       {screen === 'board' ? (
         <BoardView
           board={board}
+          averages={averages}
           tree={tree}
           busy={busy}
           error={error}

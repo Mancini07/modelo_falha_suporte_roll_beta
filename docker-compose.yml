@@ -1,0 +1,21 @@
+services:
+  server:
+    build: ./server
+    env_file: .env
+    environment:
+      PORT: 4000
+      NODE_ENV: production
+    volumes:
+      - pairs-data:/app/data
+    restart: unless-stopped
+
+  web:
+    build: ./web
+    ports:
+      - "5173:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  pairs-data:

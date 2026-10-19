@@ -49,7 +49,7 @@ export default function LineView({ companyId, onBack }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   /** Quanto acima da mediana do grupo um ponto precisa estar para se destacar. */
-  const [spreadC, setSpreadC] = useState(5);
+  const [spreadC, setSpreadC] = useState(10);
 
   useEffect(() => {
     const ctrl = new AbortController();

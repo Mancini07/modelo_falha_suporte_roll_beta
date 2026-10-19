@@ -18,7 +18,7 @@ export interface PairState {
   delta: number | null;
   t: number | null;
   lagMs: number | null;
-  status: 'ALARME' | 'NORMAL' | 'SEM_DADOS' | 'SENSOR_FORA';
+  status: 'ALARME' | 'ALERTA' | 'NORMAL' | 'SEM_DADOS' | 'SENSOR_FORA';
   /** sensor solto da máquina — a temperatura dele não é a do mancal */
   offMachineA: boolean;
   offMachineB: boolean;
@@ -39,6 +39,13 @@ export interface PairState {
   deviationReference: number;
   /** o lado quente trocou em relação ao normal do ativo */
   inverted: boolean;
+  /** desvio médio (a − b) das últimas 6 h e quantas comparações entraram */
+  avg6h?: number | null;
+  n6h?: number;
+  /** inclinação do desvio nas últimas 3 h, em °C/h */
+  driftCPerH?: number | null;
+  /** minutos até romper o limite se a inclinação se mantiver */
+  etaBreachMin?: number | null;
   /** quantas comparações romperam o limite na janela de risco */
   breachCount: number;
   /** instante do rompimento mais recente na janela */
@@ -282,4 +289,21 @@ export interface LineDetail {
   line: string;
   facilityId: number;
   points: LinePoint[];
+}
+
+/** Desvio médio (a − b) dos últimos 7, 15 e 30 dias de um par. */
+export interface PairAverages {
+  d7: number | null;
+  d15: number | null;
+  d30: number | null;
+  n7: number;
+  n15: number;
+  n30: number;
+  /** percentil 95 de 72 h da menor aceleração entre os eixos de cada ponto, em g */
+  stillAccA: number | null;
+  stillAccB: number | null;
+  mountedMinAccG: number;
+  /** ponto parado há 3 dias ou mais enquanto o outro do ativo vibra */
+  possiblyOffA: boolean;
+  possiblyOffB: boolean;
 }

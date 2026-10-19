@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { config } from './config.js';
+import { getClosingComments } from './dynamo.js';
 import type { PositionInfo } from './types.js';
 
 const pool = new pg.Pool({
@@ -347,6 +348,7 @@ export async function getOccurrenceHistory(
   const statusNames = await statusMap();
 
   const ids = rows.map((r) => r.id);
+  const closingComments = await getClosingComments(ids);
   const { rows: diags } = await pool.query(
     `SELECT d.id, d."assetOccurrenceId",
             coalesce(nullif(dg."nameInEN", ''), dg.name) AS label,
@@ -400,7 +402,7 @@ export async function getOccurrenceHistory(
     validAnalysis: r.validAnalysis,
     validDiagnostic: r.validDiagnostic,
     hadIntervention: r.hadIntervention,
-    closingComment: r.exclusionReason,
+    closingComment: closingComments.get(r.id) ?? r.exclusionReason,
     comments: r.comments,
     diagnostics: byOccurrence.get(r.id) ?? [],
   }));

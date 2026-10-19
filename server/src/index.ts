@@ -15,7 +15,7 @@ import type { LinePoint } from './postgres.js';
 import {
   listPairs, addPair, removePair, updatePairSettings, updatePairBaseline,
 } from './pairsStore.js';
-import { evaluateBoard, learnBaseline, dropStopped } from './board.js';
+import { evaluateBoard, evaluateAverages, learnBaseline, dropStopped } from './board.js';
 import { getTemperatureSeries, getVibrationSeries } from './dynamo.js';
 import { pairSeries, diagnose, summarize } from './pairing.js';
 import type { AnalysisResult, PositionInfo } from './types.js';
@@ -309,6 +309,17 @@ app.get('/api/board', async (req, res) => {
     res.json(await evaluateBoard(pinned, thresholdC, toleranceMin * 60_000));
   } catch (err) {
     console.error('[/api/board]', err);
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/** Desvio médio de 7, 15 e 30 dias de cada par cravado (cache de 10 min). */
+app.get('/api/board/averages', async (req, res) => {
+  try {
+    const toleranceMin = num(req.query.toleranceMin, config.defaults.toleranceMin);
+    res.json(await evaluateAverages(await listPairs(), toleranceMin * 60_000));
+  } catch (err) {
+    console.error('[/api/board/averages]', err);
     res.status(500).json({ error: (err as Error).message });
   }
 });

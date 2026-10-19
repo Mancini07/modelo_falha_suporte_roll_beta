@@ -11,7 +11,7 @@ pulsam em vermelho.
 
 | Parâmetro | Valor | Onde muda |
 |---|---|---|
-| Limite de desvio **padrão** | **3 °C** | **cravado** — só em `config.defaults.thresholdC` |
+| Limite de desvio **padrão** | **5 °C** | **cravado** — só em `config.defaults.thresholdC` |
 | Limite **por ativo** | opcional | no diálogo **+ Pin asset**, campo *Tolerable deviation* |
 | Tolerância de horário | **10 min** | campo no cabeçalho / `config.defaults.toleranceMin` |
 | Correção de temperatura | **−6,8 °C** | `TEMPERATURE_OFFSET_C` no `.env` |

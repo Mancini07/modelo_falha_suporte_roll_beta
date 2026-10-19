@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
-import type { PairState } from '../types';
+import type { PairAverages, PairState } from '../types';
+import DeviationStrip from './DeviationStrip';
 import { c1, signed1, stamp, stampFull, shortName } from '../format.en';
 
 interface Props {
   pair: PairState;
+  /** desvio médio de 7/15/30 dias; ausente enquanto carrega */
+  averages?: PairAverages;
   /** For how many hours a breach keeps the asset at risk. */
   riskHoldHours: number;
   /** Minimum acceleration RMS, in g, for a sensor to count as mounted. */
@@ -24,12 +27,13 @@ const H = 200;
  * which side heats up.
  */
 export default function AssetTwin({
-  pair, riskHoldHours, mountedMinAccG, onRemove, onAnalyse, onQuickLimit,
+  pair, averages, riskHoldHours, mountedMinAccG, onRemove, onAnalyse, onQuickLimit,
 }: Props) {
   /**
    * Rascunho do limite. Fica local enquanto se digita e só sobe ao confirmar,
    * senão cada tecla dispararia uma gravação e uma recarga do painel.
    */
+  const [more, setMore] = useState(false);
   const [draft, setDraft] = useState(String(pair.thresholdC));
   useEffect(() => setDraft(String(pair.thresholdC)), [pair.thresholdC]);
 
@@ -44,6 +48,7 @@ export default function AssetTwin({
   // Cada ativo traz o seu limite; o global é só o padrão de quem não definiu.
   const thresholdC = pair.thresholdC;
   const alarm = pair.status === 'ALARME';
+  const alert = pair.status === 'ALERTA';
   const noData = pair.status === 'SEM_DADOS';
   /**
    * Sensor solto invalida a comparação: ele lê o ambiente, não o mancal. Nada
@@ -101,7 +106,7 @@ export default function AssetTwin({
 
   return (
     <article
-      className={`twin${alarm ? ' is-alarm' : ''}${noData ? ' is-nodata' : ''}${sensorOff ? ' is-sensoroff' : ''}`}
+      className={`twin${alarm ? ' is-alarm' : ''}${alert ? ' is-alert' : ''}${noData ? ' is-nodata' : ''}${sensorOff ? ' is-sensoroff' : ''}`}
     >
       <header className="twin-head">
         <div className="twin-id">
@@ -135,6 +140,14 @@ export default function AssetTwin({
               title={offEvidence}
             >
               ⚟ Sensor off the machine
+            </span>
+          )}
+          {alert && (
+            <span
+              className="badge badge-alert"
+              title={`Deviation of ${signed1(Math.abs((pair.delta ?? 0) - pair.deviationReference))} °C reached the 5 °C alert level; this asset's alarm limit is ${thresholdC} °C.`}
+            >
+              ▲ Alert
             </span>
           )}
           {pair.status === 'NORMAL' && !pair.inverted && (
@@ -267,17 +280,24 @@ export default function AssetTwin({
         )}
       </svg>
 
-      <footer className="twin-foot">
-        <span className="twin-point">
-          <i className="dot" style={{ background: alarmA ? 'var(--critical)' : 'var(--series-a)' }} />
-          {shortName(pair.pointA.name)}
-        </span>
-        <span className="twin-point twin-point-right">
-          {shortName(pair.pointB.name)}
-          <i className="dot" style={{ background: alarmB ? 'var(--critical)' : 'var(--series-b)' }} />
-        </span>
-      </footer>
+      <DeviationStrip pair={pair} averages={averages} />
 
+      <button
+        type="button"
+        className="twin-more"
+        aria-expanded={more}
+        onClick={() => setMore((v) => !v)}
+      >
+        {more ? '▾ Less' : '▸ Details'}
+        {!more && hasOccurrence && (
+          <span className="twin-more-occ">
+            <i className="dot" style={{ background: occSeverity }} />
+            {pair.openOccurrences} open occ.
+          </span>
+        )}
+      </button>
+      {more && (
+        <div className="twin-details">
       <div className="twin-quick">
         <label htmlFor={`lim-${pair.id}`}>Limit</label>
         <input
@@ -320,6 +340,8 @@ export default function AssetTwin({
           </>
         )}
       </p>
+        </div>
+      )}
 
       {sensorOff && offName && (
         <p className="twin-sensoroff">
@@ -327,6 +349,20 @@ export default function AssetTwin({
           <strong>Inspection requested.</strong>
         </p>
       )}
+      {(averages?.possiblyOffA || averages?.possiblyOffB) && (() => {
+        const a = averages.possiblyOffA;
+        const name = shortName(a ? pair.pointA.name : pair.pointB.name);
+        const acc = a ? averages.stillAccA : averages.stillAccB;
+        return (
+          <p
+            className="twin-sensoroff"
+            title={`Even its highest readings in the last 72 h (95th percentile of the lowest axis: ${acc?.toFixed(4)} g) stayed below ${averages.mountedMinAccG} g, while the other point of this asset is running.`}
+          >
+            ⚟ <strong>{name}</strong> has been still for 3+ days while its pair is running —
+            the sensor may not be on the equipment.
+          </p>
+        );
+      })()}
       {pair.heldByRecentBreach && pair.lastBreachAt != null && (
         <p className="twin-held">
           Within the limit now · broke it {pair.breachCount}× in the last {riskHoldHours} h,

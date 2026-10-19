@@ -101,7 +101,7 @@ export interface PairState {
   /** defasagem entre as duas leituras, em ms */
   lagMs: number | null;
 
-  status: 'ALARME' | 'NORMAL' | 'SEM_DADOS' | 'SENSOR_FORA';
+  status: 'ALARME' | 'ALERTA' | 'NORMAL' | 'SEM_DADOS' | 'SENSOR_FORA';
   /**
    * Sensor com aceleração abaixo do mínimo enquanto o par do mesmo ativo está
    * acima: indica sensor solto da máquina. Enquanto isso vale, a comparação de
@@ -126,6 +126,13 @@ export interface PairState {
   deviationMode: 'ABSOLUTE' | 'RELATIVE';
   /** o valor de referência efetivamente usado, em °C */
   deviationReference: number;
+  /** desvio médio (a − b) das últimas 6 h e quantas comparações entraram */
+  avg6h?: number | null;
+  n6h?: number;
+  /** inclinação do desvio nas últimas 3 h, em °C/h; null sem pontos suficientes */
+  driftCPerH?: number | null;
+  /** minutos até romper o limite se a inclinação se mantiver; null se não rompe */
+  etaBreachMin?: number | null;
   /** quantas comparações romperam o limite na janela de risco */
   breachCount: number;
   /** instante do rompimento mais recente na janela */

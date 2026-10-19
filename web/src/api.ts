@@ -1,5 +1,5 @@
 import type {
-  BoardResult, Company, LineDetail, LineSummary, OccurrenceHistory, TreeFacility,
+  BoardResult, Company, PairAverages, LineDetail, LineSummary, OccurrenceHistory, TreeFacility,
 } from './types';
 
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
@@ -21,9 +21,14 @@ export function fetchBoard(toleranceMin: number, signal?: AbortSignal): Promise<
   return json<BoardResult>(`/api/board?${qs}`, { signal });
 }
 
+export function fetchAverages(toleranceMin: number, signal?: AbortSignal) {
+  const qs = new URLSearchParams({ toleranceMin: String(toleranceMin) });
+  return json<Record<string, PairAverages>>(`/api/board/averages?${qs}`, { signal });
+}
+
 /** Linha do tempo de ocorrências de um ativo. */
-export function fetchOccurrences(assetId: number, signal?: AbortSignal) {
-  return json<OccurrenceHistory>(`/api/occurrences?assetId=${assetId}`, { signal });
+export function fetchOccurrences(assetId: number, signal?: AbortSignal, limit = 5) {
+  return json<OccurrenceHistory>(`/api/occurrences?assetId=${assetId}&limit=${limit}`, { signal });
 }
 
 export function fetchTree(companyId: number, signal?: AbortSignal): Promise<TreeFacility[]> {
